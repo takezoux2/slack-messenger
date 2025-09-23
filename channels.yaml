@@ -1,0 +1,6 @@
+channel_lists:
+  - name: 'test'
+    description: 'Channels for development team'
+    channels:
+      - C09HERT8BFA
+      - C09GFMCJSLT

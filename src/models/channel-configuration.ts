@@ -4,8 +4,8 @@ import type { NamedChannelList } from './named-channel-list'
  * Configuration structure representing the complete YAML configuration file
  */
 export interface ChannelConfiguration {
-  /** Map of list names to channel lists */
-  channelLists: Record<string, NamedChannelList>
+  /** Array of named channel lists */
+  channelLists: NamedChannelList[]
 
   /** Path to the configuration file */
   filePath: string

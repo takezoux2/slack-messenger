@@ -37,50 +37,82 @@ export class ConfigValidationService {
         message: 'File path is required and must be a string',
         value: config.filePath,
       })
+    } else if (config.filePath.trim().length === 0) {
+      errors.push({
+        field: 'filePath',
+        message: 'File path cannot be empty',
+        value: config.filePath,
+      })
     }
 
-    // Validate channel lists exist
-    if (!config.channelLists || typeof config.channelLists !== 'object') {
+    // Validate channel lists exist and is array
+    if (!Array.isArray(config.channelLists)) {
       errors.push({
         field: 'channelLists',
-        message: 'Channel lists must be an object',
+        message: 'Channel lists must be an array',
         value: config.channelLists,
       })
     } else {
-      // Validate each channel list
-      const listNames = Object.keys(config.channelLists)
-
-      if (listNames.length === 0) {
+      // Validate we have at least one list
+      if (config.channelLists.length === 0) {
         errors.push({
           field: 'channelLists',
           message: 'Configuration must contain at least one channel list',
+          value: config.channelLists,
         })
       }
 
-      for (const [listName, list] of Object.entries(config.channelLists)) {
-        const listValidation = this.validateNamedChannelList(list, listName)
-        errors.push(...listValidation.errors)
+      // Validate each channel list
+      for (let i = 0; i < config.channelLists.length; i++) {
+        const list = config.channelLists[i]
+        if (list) {
+          const listResult = this.validateNamedChannelList(
+            list,
+            `channelLists[${i}]`
+          )
+          errors.push(...listResult.errors)
+        } else {
+          errors.push({
+            field: `channelLists[${i}]`,
+            message: 'Channel list cannot be null or undefined',
+            value: list,
+          })
+        }
       }
 
-      // Check for duplicate list names (case-insensitive)
-      const lowercaseNames = listNames.map(name => name.toLowerCase())
-      const uniqueNames = new Set(lowercaseNames)
-      if (uniqueNames.size !== listNames.length) {
-        errors.push({
-          field: 'channelLists',
-          message: 'Channel list names must be unique (case-insensitive)',
-          value: listNames,
-        })
+      // Check for duplicate list names
+      const listNames = new Set<string>()
+      for (let i = 0; i < config.channelLists.length; i++) {
+        const list = config.channelLists[i]
+        if (list && list.name) {
+          if (listNames.has(list.name)) {
+            errors.push({
+              field: `channelLists[${i}].name`,
+              message: `Duplicate channel list name: "${list.name}"`,
+              value: list.name,
+            })
+          } else {
+            listNames.add(list.name)
+          }
+        }
       }
     }
 
     // Validate last modified date if present
-    if (config.lastModified && !(config.lastModified instanceof Date)) {
-      errors.push({
-        field: 'lastModified',
-        message: 'Last modified must be a Date object',
-        value: config.lastModified,
-      })
+    if (config.lastModified !== undefined) {
+      if (!(config.lastModified instanceof Date)) {
+        errors.push({
+          field: 'lastModified',
+          message: 'Last modified must be a Date object',
+          value: config.lastModified,
+        })
+      } else if (isNaN(config.lastModified.getTime())) {
+        errors.push({
+          field: 'lastModified',
+          message: 'Last modified must be a valid Date',
+          value: config.lastModified,
+        })
+      }
     }
 
     return {
@@ -145,20 +177,6 @@ export class ConfigValidationService {
         )
         errors.push(...channelValidation.errors)
       })
-
-      // Check for duplicate channels within the list
-      const identifiers = list.channels.map(c => c.identifier.toLowerCase())
-      const uniqueIdentifiers = new Set(identifiers)
-      if (uniqueIdentifiers.size !== identifiers.length) {
-        const duplicates = identifiers.filter(
-          (id, index) => identifiers.indexOf(id) !== index
-        )
-        errors.push({
-          field: `${listContext}.channels`,
-          message: 'Channel list contains duplicate channels',
-          value: Array.from(new Set(duplicates)),
-        })
-      }
     }
 
     // Validate resolved channels if present
@@ -357,8 +375,8 @@ export class ConfigValidationService {
   ): ValidationResult {
     const errors: ValidationError[] = []
 
-    if (!config.channelLists[listName]) {
-      const availableNames = Object.keys(config.channelLists)
+    if (!config.channelLists.find(list => list.name === listName)) {
+      const availableNames = config.channelLists.map(list => list.name)
       errors.push({
         field: 'listName',
         message: `Channel list "${listName}" not found. Available lists: ${availableNames.join(', ')}`,
@@ -392,9 +410,7 @@ export class ConfigValidationService {
    * Check if configuration has any channels that could be resolved
    */
   hasResolvableChannels(config: ChannelConfiguration): boolean {
-    return Object.values(config.channelLists).some(
-      list => list.channels.length > 0
-    )
+    return config.channelLists.some(list => list.channels.length > 0)
   }
 
   /**
@@ -406,7 +422,7 @@ export class ConfigValidationService {
     averageChannelsPerList: number
     channelsByType: { names: number; ids: number }
   } {
-    const lists = Object.values(config.channelLists)
+    const lists = config.channelLists
     const totalLists = lists.length
     const totalChannels = lists.reduce(
       (sum, list) => sum + list.channels.length,
@@ -418,7 +434,7 @@ export class ConfigValidationService {
     for (const list of lists) {
       for (const channel of list.channels) {
         if (channel.type === 'name') nameCount++
-        else idCount++
+        else if (channel.type === 'id') idCount++
       }
     }
 

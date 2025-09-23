@@ -1,14 +1,12 @@
 channel_lists:
-  development:
-    name: 'Development Channels'
+  - name: 'development'
     description: 'Channels for development team'
     channels:
       - '#dev-general'
       - '#dev-backend'
       - '#dev-frontend'
 
-  production:
-    name: 'Production Channels'
+  - name: 'production'
     description: 'Channels for production alerts'
     channels:
       - '#alerts'

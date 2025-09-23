@@ -1,5 +1,5 @@
 channel_lists:
-  cached-list:
-    name: 'Cached Test List'
+  - name: 'cached-list'
+    description: 'Cached Test List'
     channels:
       - '#cached-channel'

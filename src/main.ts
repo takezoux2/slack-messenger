@@ -230,7 +230,7 @@ async function executeBroadcastCommand(
     const command = BroadcastMessageCommand.fromEnvironment({
       verboseLogging: options.verbose,
     })
-
+    options.listName = options.channelId
     const result = await command.execute(options)
 
     // Output results

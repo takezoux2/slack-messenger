@@ -120,7 +120,9 @@ export class BroadcastMessageCommand {
         return this.createFailureResult(error, 1, output)
       }
 
-      const targetList = configuration.channelLists[options.listName]
+      const targetList = configuration.channelLists.find(
+        list => list.name === options.listName
+      )
       if (!targetList) {
         const error = new Error(`Channel list "${options.listName}" not found`)
         return this.createFailureResult(error, 1, output)

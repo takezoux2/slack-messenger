@@ -30,7 +30,16 @@ export class YamlConfigService {
 
       // Read and parse YAML file
       const fileContent = await fs.readFile(filePath, 'utf8')
-      const parsedYaml = yaml.load(fileContent) as any
+
+      let parsedYaml: any
+      try {
+        parsedYaml = yaml.load(fileContent)
+      } catch (yamlError) {
+        if (yamlError instanceof Error) {
+          throw new Error(`Invalid YAML syntax: ${yamlError.message}`)
+        }
+        throw new Error('Failed to parse YAML file')
+      }
 
       if (!parsedYaml || typeof parsedYaml !== 'object') {
         throw new Error('Configuration file must contain a valid YAML object')
@@ -43,51 +52,85 @@ export class YamlConfigService {
         )
       }
 
+      if (!Array.isArray(parsedYaml.channel_lists)) {
+        throw new Error(
+          'Configuration "channel_lists" must be an array of channel list objects'
+        )
+      }
+
+      if (parsedYaml.channel_lists.length === 0) {
+        throw new Error('Configuration must contain at least one channel list')
+      }
+
       // Transform raw YAML to typed configuration
-      const channelLists: Record<string, NamedChannelList> = {}
+      const channelLists: NamedChannelList[] = []
+      const seenListNames = new Set<string>()
 
-      for (const [listName, rawChannels] of Object.entries(
-        parsedYaml.channel_lists
-      )) {
-        if (!Array.isArray(rawChannels)) {
-          throw new Error(`Channel list "${listName}" must be an array`)
+      for (let i = 0; i < parsedYaml.channel_lists.length; i++) {
+        const listItem = parsedYaml.channel_lists[i]
+
+        if (!listItem || typeof listItem !== 'object') {
+          throw new Error(`Channel list at index ${i} must be an object`)
         }
 
-        if (rawChannels.length === 0) {
-          throw new Error(`Channel list "${listName}" cannot be empty`)
-        }
-
-        if (rawChannels.length > 100) {
+        if (!listItem.name || typeof listItem.name !== 'string') {
           throw new Error(
-            `Channel list "${listName}" cannot contain more than 100 channels`
+            `Channel list at index ${i} must have a "name" property`
           )
         }
 
-        const channels: ChannelTarget[] = rawChannels.map((channel, index) => {
-          if (typeof channel !== 'string') {
-            throw new Error(
-              `Channel at index ${index} in list "${listName}" must be a string`
-            )
-          }
+        if (listItem.name.trim().length === 0) {
+          throw new Error(`Channel list name at index ${i} cannot be empty`)
+        }
 
-          return this.parseChannelIdentifier(channel, listName, index)
-        })
+        if (seenListNames.has(listItem.name)) {
+          throw new Error(`Duplicate channel list name: "${listItem.name}"`)
+        }
+        seenListNames.add(listItem.name)
+
+        if (!listItem.channels || !Array.isArray(listItem.channels)) {
+          throw new Error(
+            `Channel list "${listItem.name}" must have a "channels" array`
+          )
+        }
+
+        if (listItem.channels.length === 0) {
+          throw new Error(`Channel list "${listItem.name}" cannot be empty`)
+        }
+
+        if (listItem.channels.length > 100) {
+          throw new Error(
+            `Channel list "${listItem.name}" cannot contain more than 100 channels`
+          )
+        }
+
+        const channels: ChannelTarget[] = listItem.channels.map(
+          (channel: any, index: number) => {
+            if (typeof channel !== 'string') {
+              throw new Error(
+                `Channel at index ${index} in list "${listItem.name}" must be a string`
+              )
+            }
+
+            return this.parseChannelIdentifier(channel, listItem.name, index)
+          }
+        )
 
         // Check for duplicates within the list
         const identifiers = new Set()
         for (const channel of channels) {
           if (identifiers.has(channel.identifier)) {
             throw new Error(
-              `Duplicate channel "${channel.identifier}" in list "${listName}"`
+              `Duplicate channel "${channel.identifier}" in list "${listItem.name}"`
             )
           }
           identifiers.add(channel.identifier)
         }
 
-        channelLists[listName] = {
-          name: listName,
+        channelLists.push({
+          name: listItem.name,
           channels,
-        }
+        })
       }
 
       const configuration: ChannelConfiguration = {
@@ -103,6 +146,7 @@ export class YamlConfigService {
       return configuration
     } catch (error) {
       if (error instanceof Error) {
+        // File system errors
         if (error.message.includes('ENOENT')) {
           throw new Error(`Configuration file not found: ${filePath}`)
         }
@@ -111,8 +155,28 @@ export class YamlConfigService {
             `Permission denied reading configuration file: ${filePath}`
           )
         }
+        if (error.message.includes('EISDIR')) {
+          throw new Error(
+            `Configuration path is a directory, not a file: ${filePath}`
+          )
+        }
+
+        // Re-throw validation and parsing errors as-is
+        if (
+          error.message.includes('Invalid YAML') ||
+          error.message.includes('Configuration') ||
+          error.message.includes('Channel list') ||
+          error.message.includes('Duplicate') ||
+          error.message.includes('Invalid channel')
+        ) {
+          throw error
+        }
       }
-      throw error
+
+      // Unexpected errors
+      throw new Error(
+        `Failed to load configuration: ${error instanceof Error ? error.message : 'Unknown error'}`
+      )
     }
   }
 
@@ -124,6 +188,12 @@ export class YamlConfigService {
     listName: string,
     index: number
   ): ChannelTarget {
+    if (typeof identifier !== 'string') {
+      throw new Error(
+        `Channel identifier at index ${index} in list "${listName}" must be a string, got ${typeof identifier}`
+      )
+    }
+
     const trimmed = identifier.trim()
 
     if (!trimmed) {
@@ -145,6 +215,12 @@ export class YamlConfigService {
       if (!/^[a-z0-9-_]+$/.test(channelName)) {
         throw new Error(
           `Invalid channel name "${trimmed}" at index ${index} in list "${listName}" - must contain only lowercase letters, numbers, hyphens, and underscores`
+        )
+      }
+
+      if (channelName.length > 80) {
+        throw new Error(
+          `Invalid channel name "${trimmed}" at index ${index} in list "${listName}" - name too long (max 80 characters)`
         )
       }
 
@@ -175,7 +251,7 @@ export class YamlConfigService {
     listName: string
   ): Promise<NamedChannelList | null> {
     const config = await this.loadConfiguration(filePath)
-    return config.channelLists[listName] || null
+    return config.channelLists.find(list => list.name === listName) || null
   }
 
   /**
@@ -183,7 +259,7 @@ export class YamlConfigService {
    */
   async getChannelListNames(filePath: string): Promise<string[]> {
     const config = await this.loadConfiguration(filePath)
-    return Object.keys(config.channelLists)
+    return config.channelLists.map(list => list.name)
   }
 
   /**
@@ -224,7 +300,7 @@ export class YamlConfigService {
    */
   async getTotalChannelCount(filePath: string): Promise<number> {
     const config = await this.loadConfiguration(filePath)
-    return Object.values(config.channelLists).reduce(
+    return config.channelLists.reduce(
       (total, list) => total + list.channels.length,
       0
     )
@@ -237,7 +313,7 @@ export class YamlConfigService {
     const config = await this.loadConfiguration(filePath)
     const uniqueChannels = new Map<string, ChannelTarget>()
 
-    for (const list of Object.values(config.channelLists)) {
+    for (const list of config.channelLists) {
       for (const channel of list.channels) {
         uniqueChannels.set(channel.identifier, channel)
       }

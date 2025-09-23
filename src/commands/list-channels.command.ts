@@ -81,17 +81,16 @@ export class ListChannelsCommand {
         }
         return this.createFailureResult(err, 3, output)
       }
-
       // Validate configuration structure
       const configValidation =
         this.configValidationService.validateChannelConfiguration(configuration)
+
       if (!configValidation.isValid) {
         const error = new Error(
           `Invalid configuration: ${configValidation.errors.map(e => e.message).join(', ')}`
         )
         return this.createFailureResult(error, 3, output)
       }
-
       // Generate output
       this.generateListOutput(output, configuration, configPath)
 
@@ -134,7 +133,7 @@ export class ListChannelsCommand {
     configuration: ChannelConfiguration,
     configPath: string
   ): void {
-    const lists = Object.values(configuration.channelLists)
+    const lists = configuration.channelLists
 
     if (lists.length === 0) {
       output.push(`No channel lists found in ${configPath}`)
@@ -265,7 +264,7 @@ export class ListChannelsCommand {
     try {
       const configuration =
         await this.yamlConfigService.loadConfiguration(configPath)
-      const list = configuration.channelLists[listName]
+      const list = configuration.channelLists.find(l => l.name === listName)
 
       if (!list) {
         return {
@@ -324,13 +323,11 @@ export class ListChannelsCommand {
 
       const searchLower = searchTerm.toLowerCase()
 
-      for (const [listName, list] of Object.entries(
-        configuration.channelLists
-      )) {
+      for (const list of configuration.channelLists) {
         for (const channel of list.channels) {
           if (channel.identifier.toLowerCase().includes(searchLower)) {
             matches.push({
-              listName,
+              listName: list.name,
               channel: channel.identifier,
               type: channel.type,
             })

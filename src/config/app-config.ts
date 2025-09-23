@@ -155,9 +155,9 @@ export class AppConfig {
       }
 
       const configuration = result.configuration
-      const availableLists = Object.keys(configuration.channelLists)
+      const availableLists = configuration.channelLists.map(list => list.name)
 
-      if (!configuration.channelLists[listName]) {
+      if (!configuration.channelLists.find(list => list.name === listName)) {
         return {
           valid: false,
           error: `Channel list "${listName}" not found in configuration`,

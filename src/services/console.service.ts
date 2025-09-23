@@ -219,7 +219,7 @@ export class ConsoleService {
     config: ChannelConfiguration,
     configPath: string
   ): void {
-    const lists = Object.values(config.channelLists)
+    const lists = config.channelLists
 
     if (lists.length === 0) {
       this.writeText(`No channel lists found in ${configPath}`)

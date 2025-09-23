@@ -10,7 +10,7 @@
 **Purpose**: Represents the complete YAML configuration file structure  
 **Fields**:
 
-- `channelLists: Record<string, NamedChannelList>` - Map of list names to channel lists
+- `channelLists: NamedChannelList[]` - Map of list names to channel lists
 - `filePath: string` - Path to the configuration file
 - `lastModified?: Date` - Configuration file modification time
 

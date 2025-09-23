@@ -120,7 +120,7 @@ export class CliService {
         .option(
           '-c, --config <path>',
           'Path to YAML configuration file',
-          './slack-config.yml'
+          './channels.yaml'
         )
         .option('-v, --verbose', 'Enable verbose logging', false)
         .option(
@@ -164,7 +164,7 @@ export class CliService {
         .option(
           '-c, --config <path>',
           'Path to YAML configuration file',
-          './slack-config.yml'
+          './channels.yaml'
         )
         .option(
           '-f, --format <format>',
@@ -448,7 +448,7 @@ export class CliService {
       .option(
         '-c, --config <path>',
         'Path to YAML configuration file',
-        './slack-config.yml'
+        './channels.yaml'
       )
       .option('-v, --verbose', 'Enable verbose logging', false)
       .option(
@@ -483,7 +483,7 @@ export class CliService {
       .option(
         '-c, --config <path>',
         'Path to YAML configuration file',
-        './slack-config.yml'
+        './channels.yaml'
       )
       .option(
         '-f, --format <format>',
@@ -605,7 +605,7 @@ Environment Variables:
   SLACK_LOG_LEVEL    Default log level (debug, info, warn, error)
 
 Configuration:
-  Default config file: ./slack-config.yml
+  Default config file: './channels.yaml'
   Use --config to specify a different configuration file path.
 `
   }

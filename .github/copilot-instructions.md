@@ -3,23 +3,31 @@
 Auto-generated from all feature plans. Last updated: 2025-09-23
 
 ## Active Technologies
+
 - TypeScript 5.x with Node.js 21 + TypeScript compiler, Vitest testing framework, ESLint, Prettier (001-init-console-app)
 - TypeScript 5.x with Node.js 21+ + @slack/web-api, commander.js for CLI parsing (002-send-slack-message)
 - N/A (stateless messaging) (002-send-slack-message)
+- TypeScript 5.x with Node.js 21+ + @slack/web-api, commander.js, js-yaml for YAML parsing (004-load-channel-id)
+- YAML configuration files (004-load-channel-id)
 
 ## Project Structure
+
 ```
 src/
 tests/
 ```
 
 ## Commands
+
 npm test; npm run lint
 
 ## Code Style
+
 TypeScript 5.x with Node.js 21: Follow standard conventions
 
 ## Recent Changes
+
+- 004-load-channel-id: Added TypeScript 5.x with Node.js 21+ + @slack/web-api, commander.js, js-yaml for YAML parsing
 - 002-send-slack-message: Added TypeScript 5.x with Node.js 21+ + @slack/web-api, commander.js for CLI parsing
 - 001-init-console-app: Added TypeScript 5.x with Node.js 21 + TypeScript compiler, Vitest testing framework, ESLint, Prettier
 

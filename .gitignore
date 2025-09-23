@@ -149,3 +149,5 @@ coverage/
 slack-config.json
 *.pem
 *.key
+
+.env

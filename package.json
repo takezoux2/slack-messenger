@@ -11,6 +11,7 @@
   "scripts": {
     "build": "tsc",
     "start": "tsx src/main.ts",
+    "run": "tsx src/main.ts",
     "dev": "tsc --watch",
     "test": "vitest run",
     "test:run": "vitest run",
@@ -29,7 +30,7 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
-    "@types/node": "^20.11.25",
+    "@types/node": "^20.19.17",
     "@typescript-eslint/eslint-plugin": "^6.21.0",
     "@typescript-eslint/parser": "^6.21.0",
     "eslint": "^8.57.0",
@@ -41,6 +42,8 @@
   },
   "dependencies": {
     "@slack/web-api": "^7.10.0",
-    "commander": "^14.0.1"
+    "commander": "^14.0.1",
+    "dotenv": "^17.2.2",
+    "is-stream": "^2.0.1"
   }
 }

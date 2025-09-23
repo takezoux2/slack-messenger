@@ -11,7 +11,7 @@ import { ChannelTarget } from '../models/channel-target.js'
 import { AuthenticationCredentials } from '../models/authentication-credentials.js'
 import { MessageDeliveryResult } from '../models/message-delivery-result.js'
 
-export interface SlackApiServiceConfig {
+export interface SlackServiceConfig {
   credentials: AuthenticationCredentials
   logLevel?: LogLevel
   timeout?: number
@@ -19,11 +19,11 @@ export interface SlackApiServiceConfig {
   retryDelayMs?: number
 }
 
-export class SlackApiService {
+export class SlackService {
   private readonly client: WebClient
-  private readonly config: Required<SlackApiServiceConfig>
+  private readonly config: Required<SlackServiceConfig>
 
-  constructor(config: SlackApiServiceConfig) {
+  constructor(config: SlackServiceConfig) {
     this.config = {
       credentials: config.credentials,
       logLevel: config.logLevel || LogLevel.INFO,
@@ -288,33 +288,31 @@ export class SlackApiService {
   /**
    * Create SlackApiService from environment
    */
-  static fromEnvironment(
-    options?: Partial<SlackApiServiceConfig>
-  ): SlackApiService {
+  static fromEnvironment(options?: Partial<SlackServiceConfig>): SlackService {
     const credentials = AuthenticationCredentials.fromEnvironment()
-    return new SlackApiService({
+    return new SlackService({
       credentials,
       ...options,
     })
   }
 
   /**
-   * Create SlackApiService with custom credentials
+   * Create SlackService with custom credentials
    */
   static withCredentials(
     credentials: AuthenticationCredentials,
-    options?: Partial<SlackApiServiceConfig>
-  ): SlackApiService {
-    return new SlackApiService({
+    options?: Partial<SlackServiceConfig>
+  ): SlackService {
+    return new SlackService({
       credentials,
       ...options,
     })
   }
 
   /**
-   * Create SlackApiService for testing with mocked client
+   * Create SlackService for testing with mocked client
    */
-  static forTesting(config: SlackApiServiceConfig): SlackApiService {
-    return new SlackApiService(config)
+  static forTesting(config: SlackServiceConfig): SlackService {
+    return new SlackService(config)
   }
 }

@@ -17,7 +17,7 @@ describe('Integration: Error Scenarios', () => {
     exitCode: number
   }> => {
     return new Promise(resolve => {
-      const child = spawn('npm', ['run', 'run', '--', ...args], {
+      const child = spawn('yarn', ['start', ...args], {
         env: { ...process.env, ...env },
         stdio: 'pipe',
         shell: true,

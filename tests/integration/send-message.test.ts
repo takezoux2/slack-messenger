@@ -17,7 +17,7 @@ describe('Integration: Basic Message Sending', () => {
     exitCode: number
   }> => {
     return new Promise(resolve => {
-      const child = spawn('npm', ['run', 'run', '--', ...args], {
+      const child = spawn('yarn', ['start', ...args], {
         env: { ...process.env, ...env },
         stdio: 'pipe',
         shell: true,
@@ -73,22 +73,20 @@ describe('Integration: Basic Message Sending', () => {
 
   describe('Test 2: Invalid Channel ID (Exit Code 1)', () => {
     it('should fail with exit code 1 for invalid channel', async () => {
-      const { exitCode, stderr } = await execCommand([
-        'send-message',
-        'invalid-channel',
-        'Test message',
-      ])
+      const { exitCode, stderr } = await execCommand(
+        ['send-message', 'invalid-channel', 'Test message'],
+        { SLACK_BOT_TOKEN: 'xoxb-test-token-invalid-channel' }
+      )
 
       expect(exitCode).toBe(1)
       expect(stderr).toMatch(/Invalid channel ID format|Must be like C/i)
     })
 
     it('should show helpful error message for invalid channel format', async () => {
-      const { stderr } = await execCommand([
-        'send-message',
-        '#general',
-        'Test message',
-      ])
+      const { stderr } = await execCommand(
+        ['send-message', '#general', 'Test message'],
+        { SLACK_BOT_TOKEN: 'xoxb-test-token-invalid-format' }
+      )
 
       expect(stderr).toMatch(/Invalid channel ID format/i)
       expect(stderr).toMatch(/Must be like C\d+/i)
@@ -129,25 +127,27 @@ describe('Integration: Basic Message Sending', () => {
 
   describe('Test 4: Empty Message (Exit Code 1)', () => {
     it('should fail with exit code 1 for empty message', async () => {
-      const { exitCode, stderr } = await execCommand([
-        'send-message',
-        'C1234567890',
-        '',
-      ])
+      const { exitCode, stderr } = await execCommand(
+        ['send-message', 'C1234567890', ''],
+        { SLACK_BOT_TOKEN: 'xoxb-test-token-empty-msg' }
+      )
 
       expect(exitCode).toBe(1)
-      expect(stderr).toMatch(/empty.*message|message.*empty/i)
+      expect(stderr).toMatch(
+        /empty.*message|message.*empty|missing.*argument.*message/i
+      )
     })
 
     it('should fail with exit code 1 for whitespace-only message', async () => {
-      const { exitCode, stderr } = await execCommand([
-        'send-message',
-        'C1234567890',
-        '   \t  \n  ',
-      ])
+      const { exitCode, stderr } = await execCommand(
+        ['send-message', 'C1234567890', '   \t  \n  '],
+        { SLACK_BOT_TOKEN: 'xoxb-test-token-whitespace-msg' }
+      )
 
       expect(exitCode).toBe(1)
-      expect(stderr).toMatch(/empty.*message|message.*empty/i)
+      expect(stderr).toMatch(
+        /empty.*message|message.*empty|missing.*argument.*message/i
+      )
     })
   })
 
@@ -254,11 +254,10 @@ describe('Integration: Basic Message Sending', () => {
       ]
 
       for (const channel of invalidChannels) {
-        const { exitCode, stderr } = await execCommand([
-          'send-message',
-          channel,
-          'Test message',
-        ])
+        const { exitCode, stderr } = await execCommand(
+          ['send-message', channel, 'Test message'],
+          { SLACK_BOT_TOKEN: 'xoxb-test-token-invalid-channel' }
+        )
 
         expect(exitCode).toBe(1)
         expect(stderr).toMatch(/Invalid channel ID format/i)

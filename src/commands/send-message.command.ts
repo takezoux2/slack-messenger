@@ -9,7 +9,6 @@
 import { SlackService } from '../services/slack.service.js'
 import { ErrorHandlerService } from '../services/error-handler.service.js'
 import { SlackMessage } from '../models/slack-message.js'
-import { ChannelTarget } from '../models/channel-target.js'
 import { CommandLineOptions } from '../models/command-line-options.js'
 import { MessageDeliveryResult } from '../models/message-delivery-result.js'
 import { AuthenticationCredentials } from '../models/authentication-credentials.js'
@@ -90,13 +89,19 @@ export class SendMessageCommand {
 
       // Create models
       const message = SlackMessage.create(messageText, channelId)
-      const target = ChannelTarget.create(channelId)
+      const target = {
+        identifier: channelId,
+        type: 'id' as const,
+      }
 
       this.logVerbose(
         output,
         `Message created - has markdown: ${message.hasMarkdownFormatting}, is multiline: ${message.isMultiLine}`
       )
-      this.logVerbose(output, `Target created - type: ${target.channelType}`)
+      this.logVerbose(
+        output,
+        `Target created - identifier: ${target.identifier}`
+      )
 
       // Models are validated during construction, so if we reach here they are valid
 

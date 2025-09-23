@@ -10,6 +10,10 @@ import { SlackMessage } from '../models/slack-message.js'
 import { ChannelTarget } from '../models/channel-target.js'
 import { AuthenticationCredentials } from '../models/authentication-credentials.js'
 import { MessageDeliveryResult } from '../models/message-delivery-result.js'
+import type { ResolvedChannel } from '../models/resolved-channel'
+import type { BroadcastResult } from '../models/broadcast-result'
+import type { ChannelDeliveryResult } from '../models/channel-delivery-result'
+import type { BroadcastOptions } from '../models/broadcast-options'
 
 export interface SlackServiceConfig {
   credentials: AuthenticationCredentials
@@ -63,7 +67,7 @@ export class SlackService {
         return MessageDeliveryResult.success({
           messageId: response.message.ts || '',
           timestamp: response.message.ts || '',
-          channelId: target.channelId,
+          channelId: target.identifier,
           deliveryTimeMs: deliveryTime,
           retryCount,
           metadata: {
@@ -78,7 +82,7 @@ export class SlackService {
         const error = new Error(response.error || 'Unknown Slack API error')
         return this.createFailureResult(
           error,
-          target.channelId,
+          target.identifier,
           Date.now() - startTime,
           retryCount
         )
@@ -87,7 +91,7 @@ export class SlackService {
       const deliveryTime = Date.now() - startTime
       return this.createFailureResult(
         error instanceof Error ? error : new Error(String(error)),
-        target.channelId,
+        target.identifier,
         deliveryTime,
         retryCount
       )
@@ -171,7 +175,7 @@ export class SlackService {
     target: ChannelTarget
   ): Promise<ChatPostMessageResponse> {
     return await this.client.chat.postMessage({
-      channel: target.channelId,
+      channel: target.identifier,
       text: message.getFormattedContent(),
       unfurl_links: false,
       unfurl_media: false,
@@ -314,5 +318,212 @@ export class SlackService {
    */
   static forTesting(config: SlackServiceConfig): SlackService {
     return new SlackService(config)
+  }
+
+  // ============================================================================
+  // NEW METHODS FOR BROADCAST FUNCTIONALITY
+  // ============================================================================
+
+  /**
+   * Resolve channel targets to full channel information
+   */
+  async resolveChannels(targets: ChannelTarget[]): Promise<ResolvedChannel[]> {
+    const resolved: ResolvedChannel[] = []
+    const channelCache = new Map<string, ResolvedChannel>()
+
+    // Get all channels for efficient lookup
+    const allChannels = await this.getAllChannels()
+    const channelMap = new Map(allChannels.map(ch => [ch.id, ch]))
+    const nameMap = new Map(allChannels.map(ch => [ch.name, ch]))
+
+    for (const target of targets) {
+      try {
+        let channel: ResolvedChannel | undefined
+
+        if (target.type === 'id') {
+          // Direct lookup by ID
+          if (channelCache.has(target.identifier)) {
+            channel = channelCache.get(target.identifier)
+          } else {
+            channel = channelMap.get(target.identifier)
+          }
+        } else if (target.type === 'name') {
+          // Lookup by name (remove # prefix)
+          const channelName = target.identifier.startsWith('#')
+            ? target.identifier.slice(1)
+            : target.identifier
+          channel = nameMap.get(channelName)
+        }
+
+        if (channel) {
+          resolved.push(channel)
+          channelCache.set(channel.id, channel)
+        }
+      } catch (error) {
+        // Log error but continue with other channels
+        console.warn(`Failed to resolve channel ${target.identifier}:`, error)
+      }
+    }
+
+    return resolved
+  }
+
+  /**
+   * Get all accessible channels
+   */
+  async getAllChannels(): Promise<ResolvedChannel[]> {
+    try {
+      const channels: ResolvedChannel[] = []
+      let cursor: string | undefined
+
+      do {
+        const requestParams: any = {
+          types: 'public_channel,private_channel',
+          exclude_archived: true,
+          limit: 1000,
+        }
+
+        if (cursor) {
+          requestParams.cursor = cursor
+        }
+
+        const response = await this.client.conversations.list(requestParams)
+
+        if (response.ok && response.channels) {
+          for (const channel of response.channels) {
+            channels.push({
+              id: channel.id!,
+              name: channel.name!,
+              isPrivate: channel.is_private || false,
+              isMember: channel.is_member || false,
+              isArchived: channel.is_archived || false,
+            })
+          }
+        }
+
+        cursor = response.response_metadata?.next_cursor
+      } while (cursor)
+
+      return channels
+    } catch (error) {
+      throw new Error(
+        `Failed to fetch channels: ${error instanceof Error ? error.message : String(error)}`
+      )
+    }
+  }
+
+  /**
+   * Broadcast message to multiple channels
+   */
+  async broadcastMessage(
+    channels: ResolvedChannel[],
+    message: string,
+    options?: Partial<BroadcastOptions>
+  ): Promise<BroadcastResult> {
+    const deliveryResults: ChannelDeliveryResult[] = []
+
+    for (const channel of channels) {
+      try {
+        // Skip if bot is not a member and it's a private channel
+        if (channel.isPrivate && !channel.isMember) {
+          deliveryResults.push({
+            channel,
+            status: 'skipped',
+            error: {
+              type: 'not_in_channel',
+              message: 'Bot is not a member of this private channel',
+            },
+          })
+          continue
+        }
+
+        // Skip archived channels
+        if (channel.isArchived) {
+          deliveryResults.push({
+            channel,
+            status: 'failed',
+            error: {
+              type: 'is_archived',
+              message: 'Cannot send messages to archived channels',
+            },
+          })
+          continue
+        }
+
+        // Send message
+        const response = await this.client.chat.postMessage({
+          channel: channel.id,
+          text: message,
+          as_user: true,
+        })
+
+        if (response.ok && response.ts) {
+          deliveryResults.push({
+            channel,
+            status: 'success',
+            messageId: response.ts,
+            deliveredAt: new Date(),
+          })
+        } else {
+          deliveryResults.push({
+            channel,
+            status: 'failed',
+            error: {
+              type: response.error || 'unknown_error',
+              message: response.error || 'Unknown error occurred',
+            },
+          })
+        }
+
+        // Small delay to respect rate limits
+        await new Promise(resolve => setTimeout(resolve, 100))
+      } catch (error) {
+        deliveryResults.push({
+          channel,
+          status: 'failed',
+          error: {
+            type: 'network_error',
+            message: error instanceof Error ? error.message : String(error),
+          },
+        })
+      }
+    }
+
+    // Determine overall status
+    const successCount = deliveryResults.filter(
+      r => r.status === 'success'
+    ).length
+
+    let overallStatus: 'success' | 'partial' | 'failed'
+    if (successCount === channels.length) {
+      overallStatus = 'success'
+    } else if (successCount > 0) {
+      overallStatus = 'partial'
+    } else {
+      overallStatus = 'failed'
+    }
+
+    return {
+      targetListName: options?.listName || 'unknown',
+      totalChannels: channels.length,
+      deliveryResults,
+      overallStatus,
+      completedAt: new Date(),
+    }
+  }
+
+  /**
+   * Validate channel access for broadcast
+   */
+  async validateChannelAccess(channelId: string): Promise<boolean> {
+    try {
+      const response = await this.client.conversations.info({
+        channel: channelId,
+      })
+
+      return response.ok && response.channel?.is_member === true
+    } catch (error) {
+      return false
+    }
   }
 }

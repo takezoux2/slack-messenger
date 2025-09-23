@@ -1,4 +1,22 @@
 /**
+ * Individual channel specification within a named list
+ */
+export interface ChannelTarget {
+  /** Channel ID (C1234567890) or name (#general) */
+  identifier: string
+
+  /** Indicates whether identifier is ID or name */
+  type: 'id' | 'name'
+}
+
+/**
+ * Validation rules for ChannelTarget:
+ * - Channel IDs must match pattern C[A-Z0-9]{10}
+ * - Channel names must start with # and contain valid characters
+ * - Identifier cannot be empty
+ */
+
+/**
  * ChannelTarget Model
  *
  * Represents a Slack channel target with validation and metadata.
@@ -12,7 +30,7 @@ export interface ChannelTargetParams {
   description?: string | undefined
 }
 
-export class ChannelTarget {
+export class ChannelTargetClass {
   private readonly _channelId: string
   private readonly _channelName: string | undefined
   private readonly _isPrivate: boolean
@@ -120,8 +138,8 @@ export class ChannelTarget {
   /**
    * Create a ChannelTarget from channel ID only
    */
-  static fromId(channelId: string): ChannelTarget {
-    return new ChannelTarget({ channelId })
+  static fromId(channelId: string): ChannelTargetClass {
+    return new ChannelTargetClass({ channelId })
   }
 
   /**
@@ -131,8 +149,8 @@ export class ChannelTarget {
     channelId: string,
     channelName?: string | undefined,
     isPrivate?: boolean | undefined
-  ): ChannelTarget {
-    return new ChannelTarget({ channelId, channelName, isPrivate })
+  ): ChannelTargetClass {
+    return new ChannelTargetClass({ channelId, channelName, isPrivate })
   }
 
   /**
@@ -141,8 +159,8 @@ export class ChannelTarget {
   static forPublicChannel(
     channelId: string,
     channelName?: string | undefined
-  ): ChannelTarget {
-    return new ChannelTarget({ channelId, channelName, isPrivate: false })
+  ): ChannelTargetClass {
+    return new ChannelTargetClass({ channelId, channelName, isPrivate: false })
   }
 
   /**
@@ -151,24 +169,24 @@ export class ChannelTarget {
   static forPrivateChannel(
     channelId: string,
     channelName?: string | undefined
-  ): ChannelTarget {
-    return new ChannelTarget({ channelId, channelName, isPrivate: true })
+  ): ChannelTargetClass {
+    return new ChannelTargetClass({ channelId, channelName, isPrivate: true })
   }
 
   /**
    * Create a ChannelTarget for a direct message
    */
-  static forDirectMessage(channelId: string): ChannelTarget {
+  static forDirectMessage(channelId: string): ChannelTargetClass {
     if (!channelId.startsWith('D')) {
       throw new Error('Direct message channels must have IDs starting with D')
     }
-    return new ChannelTarget({ channelId, isPrivate: true })
+    return new ChannelTargetClass({ channelId, isPrivate: true })
   }
 
   /**
    * Check if two ChannelTargets reference the same channel
    */
-  equals(other: ChannelTarget): boolean {
+  equals(other: ChannelTargetClass): boolean {
     return this._channelId === other._channelId
   }
 
@@ -202,6 +220,6 @@ export class ChannelTarget {
   toString(): string {
     const name = this._channelName ? ` (${this._channelName})` : ''
     const privacy = this._isPrivate ? ' [private]' : ''
-    return `ChannelTarget(${this._channelId}${name}${privacy})`
+    return `ChannelTargetClass(${this._channelId}${name}${privacy})`
   }
 }

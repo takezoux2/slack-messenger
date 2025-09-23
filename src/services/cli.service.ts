@@ -35,6 +35,14 @@ export interface ParsedCliArgs {
   logLevel?: string | undefined
   timeout?: number | undefined
   retries?: number | undefined
+  // Broadcast command options
+  configPath?: string | undefined
+  channelList?: string | undefined
+  dryRun?: boolean | undefined
+  maxConcurrency?: number | undefined
+  maxRetries?: number | undefined
+  // List channels command options
+  format?: string | undefined
 }
 
 export class CliService {
@@ -103,6 +111,82 @@ export class CliService {
           commandOptions = options
         })
 
+      // broadcast command
+      parser
+        .command('broadcast')
+        .description('Send a message to multiple Slack channels')
+        .argument('<channel-list>', 'Named channel list from configuration')
+        .argument('<message...>', 'Message content to send')
+        .option(
+          '-c, --config <path>',
+          'Path to YAML configuration file',
+          './slack-config.yml'
+        )
+        .option('-v, --verbose', 'Enable verbose logging', false)
+        .option(
+          '-t, --token <token>',
+          'Slack bot token (overrides SLACK_BOT_TOKEN environment variable)'
+        )
+        .option(
+          '-l, --log-level <level>',
+          'Log level (debug, info, warn, error)',
+          'info'
+        )
+        .option('--timeout <ms>', 'Timeout in milliseconds', '10000')
+        .option(
+          '--max-retries <count>',
+          'Number of retry attempts per channel',
+          '3'
+        )
+        .option(
+          '--max-concurrency <count>',
+          'Maximum concurrent deliveries',
+          '5'
+        )
+        .option(
+          '--dry-run',
+          'Show what would be sent without actually sending',
+          false
+        )
+        .action((channelList, messageParts, options) => {
+          executedCommand = 'broadcast'
+          commandArgs = [
+            channelList,
+            Array.isArray(messageParts) ? messageParts.join(' ') : messageParts,
+          ]
+          commandOptions = options
+        })
+
+      // list-channels command
+      parser
+        .command('list-channels')
+        .description('List available channel configurations')
+        .option(
+          '-c, --config <path>',
+          'Path to YAML configuration file',
+          './slack-config.yml'
+        )
+        .option(
+          '-f, --format <format>',
+          'Output format (table, json, yaml)',
+          'table'
+        )
+        .option('-v, --verbose', 'Enable verbose logging', false)
+        .option(
+          '-t, --token <token>',
+          'Slack bot token (overrides SLACK_BOT_TOKEN environment variable)'
+        )
+        .option(
+          '-l, --log-level <level>',
+          'Log level (debug, info, warn, error)',
+          'info'
+        )
+        .action(options => {
+          executedCommand = 'list-channels'
+          commandArgs = []
+          commandOptions = options
+        })
+
       // Error handling for commander errors
       parser.exitOverride(err => {
         // Transform commander errors to more user-friendly messages
@@ -111,7 +195,7 @@ export class CliService {
             err.message.match(/argument '([^']+)'/)?.[1] || 'argument'
           if (argName.includes('channel')) {
             throw new Error(
-              "error: missing required argument 'channel-id'\n\nUse --help for usage information."
+              "error: missing required argument 'channel-id' or 'channel-list'\n\nUse --help for usage information."
             )
           } else if (argName.includes('message')) {
             throw new Error('Validation error: Message cannot be empty')
@@ -172,8 +256,18 @@ export class CliService {
           filteredArgs[0] &&
           !filteredArgs[0].startsWith('-')
         ) {
-          executedCommand = 'send-message'
-          commandArgs = filteredArgs
+          // Check if first arg looks like a command
+          const firstArg = filteredArgs[0]
+          if (
+            ['send-message', 'broadcast', 'list-channels'].includes(firstArg)
+          ) {
+            // Let commander handle this as a proper command
+            return CommandLineOptions.forHelp()
+          } else {
+            // Default to send-message for backward compatibility
+            executedCommand = 'send-message'
+            commandArgs = filteredArgs
+          }
         }
       }
 
@@ -207,10 +301,42 @@ export class CliService {
           : globalOptions['retries']
             ? parseInt(globalOptions['retries'] as string, 10)
             : undefined,
+        // Broadcast command options
+        configPath: (commandOptions['config'] || globalOptions['config']) as
+          | string
+          | undefined,
+        channelList:
+          executedCommand === 'broadcast' ? commandArgs[0] : undefined,
+        dryRun: (commandOptions['dryRun'] || globalOptions['dryRun']) as
+          | boolean
+          | undefined,
+        maxConcurrency: commandOptions['maxConcurrency']
+          ? parseInt(commandOptions['maxConcurrency'] as string, 10)
+          : globalOptions['maxConcurrency']
+            ? parseInt(globalOptions['maxConcurrency'] as string, 10)
+            : undefined,
+        maxRetries: commandOptions['maxRetries']
+          ? parseInt(commandOptions['maxRetries'] as string, 10)
+          : globalOptions['maxRetries']
+            ? parseInt(globalOptions['maxRetries'] as string, 10)
+            : undefined,
+        // List channels command options
+        format: (commandOptions['format'] || globalOptions['format']) as
+          | string
+          | undefined,
       }
 
-      // Special case: Check for missing message in send-message command
-      if (parsedArgs.command === 'send-message' && !parsedArgs.message) {
+      // Adjust message for broadcast command
+      if (executedCommand === 'broadcast') {
+        parsedArgs.message = commandArgs[1]
+      }
+
+      // Special case: Check for missing message in send-message and broadcast commands
+      if (
+        (parsedArgs.command === 'send-message' ||
+          parsedArgs.command === 'broadcast') &&
+        !parsedArgs.message
+      ) {
         throw new Error('Validation error: Message cannot be empty')
       }
 
@@ -225,6 +351,14 @@ export class CliService {
         logLevel: parsedArgs.logLevel || undefined,
         timeout: parsedArgs.timeout || undefined,
         retries: parsedArgs.retries || undefined,
+        // Broadcast options
+        configPath: parsedArgs.configPath || undefined,
+        channelList: parsedArgs.channelList || undefined,
+        dryRun: parsedArgs.dryRun || undefined,
+        maxConcurrency: parsedArgs.maxConcurrency || undefined,
+        maxRetries: parsedArgs.maxRetries || undefined,
+        // List channels options
+        format: parsedArgs.format || undefined,
       })
     } catch (error) {
       if (error instanceof Error) {
@@ -305,6 +439,71 @@ export class CliService {
         // Commander will handle this action, but we parse in parseArgs method
       })
 
+    // broadcast command
+    this.program
+      .command('broadcast')
+      .description('Send a message to multiple Slack channels')
+      .argument('<channel-list>', 'Named channel list from configuration')
+      .argument('<message...>', 'Message content to send')
+      .option(
+        '-c, --config <path>',
+        'Path to YAML configuration file',
+        './slack-config.yml'
+      )
+      .option('-v, --verbose', 'Enable verbose logging', false)
+      .option(
+        '-t, --token <token>',
+        'Slack bot token (overrides SLACK_BOT_TOKEN environment variable)'
+      )
+      .option(
+        '-l, --log-level <level>',
+        'Log level (debug, info, warn, error)',
+        'info'
+      )
+      .option('--timeout <ms>', 'Timeout in milliseconds', '10000')
+      .option(
+        '--max-retries <count>',
+        'Number of retry attempts per channel',
+        '3'
+      )
+      .option('--max-concurrency <count>', 'Maximum concurrent deliveries', '5')
+      .option(
+        '--dry-run',
+        'Show what would be sent without actually sending',
+        false
+      )
+      .action((_channelList, _messageParts, _options) => {
+        // Commander will handle this action, but we parse in parseArgs method
+      })
+
+    // list-channels command
+    this.program
+      .command('list-channels')
+      .description('List available channel configurations')
+      .option(
+        '-c, --config <path>',
+        'Path to YAML configuration file',
+        './slack-config.yml'
+      )
+      .option(
+        '-f, --format <format>',
+        'Output format (table, json, yaml)',
+        'table'
+      )
+      .option('-v, --verbose', 'Enable verbose logging', false)
+      .option(
+        '-t, --token <token>',
+        'Slack bot token (overrides SLACK_BOT_TOKEN environment variable)'
+      )
+      .option(
+        '-l, --log-level <level>',
+        'Log level (debug, info, warn, error)',
+        'info'
+      )
+      .action(_options => {
+        // Commander will handle this action, but we parse in parseArgs method
+      })
+
     // Error handling
     this.program.exitOverride(err => {
       throw err
@@ -379,17 +578,35 @@ export class CliService {
   static getUsageExamples(): string {
     return `
 Examples:
-  $ slack-messenger send-message C1234567890 "Hello, World!"
-  $ slack-messenger send-message C1234567890 "Hello" --verbose
-  $ slack-messenger send-message C1234567890 "Hello" --timeout 5000
-  $ slack-messenger send-message C1234567890 "Hello" --retries 1
-  $ slack-messenger send-message C1234567890 Hello World
-  $ slack-messenger --help
-  $ slack-messenger --version
+  Send Message:
+    $ slack-messenger send-message C1234567890 "Hello, World!"
+    $ slack-messenger send-message C1234567890 "Hello" --verbose
+    $ slack-messenger send-message C1234567890 "Hello" --timeout 5000
+    $ slack-messenger send-message C1234567890 "Hello" --retries 1
+    $ slack-messenger send-message C1234567890 Hello World
+
+  Broadcast Message:
+    $ slack-messenger broadcast all-teams "Deployment complete!"
+    $ slack-messenger broadcast dev-channels "New feature released" --config ./my-config.yml
+    $ slack-messenger broadcast marketing "Campaign update" --dry-run
+    $ slack-messenger broadcast all-teams "Important announcement" --max-concurrency 3
+
+  List Channels:
+    $ slack-messenger list-channels
+    $ slack-messenger list-channels --format json
+    $ slack-messenger list-channels --config ./my-config.yml --format yaml
+
+  General:
+    $ slack-messenger --help
+    $ slack-messenger --version
 
 Environment Variables:
   SLACK_BOT_TOKEN    Slack bot token (required if not provided via --token)
   SLACK_LOG_LEVEL    Default log level (debug, info, warn, error)
+
+Configuration:
+  Default config file: ./slack-config.yml
+  Use --config to specify a different configuration file path.
 `
   }
 }

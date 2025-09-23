@@ -44,9 +44,9 @@
 
 ## Phase 3.1: Setup
 
-- [ ] T001 Add js-yaml dependency via yarn and update package.json
-- [ ] T002 [P] Create TypeScript types for @types/js-yaml in package.json
-- [ ] T003 [P] Configure ESLint rules for YAML imports and new models
+- [x] T001 Add js-yaml dependency via yarn and update package.json
+- [x] T002 [P] Create TypeScript types for @types/js-yaml in package.json
+- [x] T003 [P] Configure ESLint rules for YAML imports and new models
 
 ## Phase 3.2: Tests First (TDD) ⚠️ MUST COMPLETE BEFORE 3.3
 
@@ -54,43 +54,43 @@
 
 ### Contract Tests
 
-- [ ] T004 [P] CLI broadcast command contract test in tests/contract/cli-broadcast.test.ts
-- [ ] T005 [P] CLI list-channels command contract test in tests/contract/cli-list-channels.test.ts
-- [ ] T006 [P] Slack API conversations.list contract test in tests/contract/slack-conversations-list.test.ts
-- [ ] T007 [P] Slack API chat.postMessage batch contract test in tests/contract/slack-chat-post-batch.test.ts
+- [x] T004 [P] CLI broadcast command contract test in tests/contract/cli-broadcast.test.ts
+- [x] T005 [P] CLI list-channels command contract test in tests/contract/cli-list-channels.test.ts
+- [x] T006 [P] Slack API conversations.list contract test in tests/contract/slack-conversations-list.test.ts
+- [x] T007 [P] Slack API chat.postMessage batch contract test in tests/contract/slack-chat-post-batch.test.ts
 
 ### Integration Tests
 
-- [ ] T008 [P] Broadcast to named list integration test in tests/integration/broadcast-message.test.ts
-- [ ] T009 [P] YAML configuration loading integration test in tests/integration/yaml-config-loading.test.ts
-- [ ] T010 [P] Dry-run preview integration test in tests/integration/dry-run-broadcast.test.ts
-- [ ] T011 [P] Partial delivery failure handling integration test in tests/integration/partial-failure.test.ts
-- [ ] T012 [P] Channel resolution with mixed IDs/names integration test in tests/integration/channel-resolution.test.ts
+- [x] T008 [P] Broadcast to named list integration test in tests/integration/broadcast-message.test.ts
+- [x] T009 [P] YAML configuration loading integration test in tests/integration/yaml-config-loading.test.ts
+- [x] T010 [P] Dry-run preview integration test in tests/integration/dry-run-broadcast.test.ts
+- [x] T011 [P] Partial delivery failure handling integration test in tests/integration/partial-failure.test.ts
+- [x] T012 [P] Channel resolution with mixed IDs/names integration test in tests/integration/channel-resolution.test.ts
 
 ## Phase 3.3: Core Implementation (ONLY after tests are failing)
 
 ### Data Models
 
-- [ ] T013 [P] ChannelConfiguration interface in src/models/channel-configuration.ts
-- [ ] T014 [P] NamedChannelList interface in src/models/named-channel-list.ts
-- [ ] T015 [P] ChannelTarget interface in src/models/channel-target.ts
-- [ ] T016 [P] ResolvedChannel interface in src/models/resolved-channel.ts
-- [ ] T017 [P] BroadcastMessage interface in src/models/broadcast-message.ts
-- [ ] T018 [P] BroadcastResult interface in src/models/broadcast-result.ts
-- [ ] T019 [P] ChannelDeliveryResult interface in src/models/channel-delivery-result.ts
-- [ ] T020 [P] BroadcastOptions interface in src/models/broadcast-options.ts
-- [ ] T021 [P] ListSelector interface in src/models/list-selector.ts
+- [x] T013 [P] ChannelConfiguration interface in src/models/channel-configuration.ts
+- [x] T014 [P] NamedChannelList interface in src/models/named-channel-list.ts
+- [x] T015 [P] ChannelTarget interface in src/models/channel-target.ts
+- [x] T016 [P] ResolvedChannel interface in src/models/resolved-channel.ts
+- [x] T017 [P] BroadcastMessage interface in src/models/broadcast-message.ts
+- [x] T018 [P] BroadcastResult interface in src/models/broadcast-result.ts
+- [x] T019 [P] ChannelDeliveryResult interface in src/models/channel-delivery-result.ts
+- [x] T020 [P] BroadcastOptions interface in src/models/broadcast-options.ts
+- [x] T021 [P] ListSelector interface in src/models/list-selector.ts
 
 ### Configuration Service
 
-- [ ] T022 [P] YAML configuration loader in src/services/yaml-config.service.ts
-- [ ] T023 [P] Configuration validation service in src/services/config-validation.service.ts
+- [x] T022 [P] YAML configuration loader in src/services/yaml-config.service.ts
+- [x] T023 [P] Configuration validation service in src/services/config-validation.service.ts
 
 ### Slack Service Extensions
 
-- [ ] T024 Channel resolution service methods in src/services/slack.service.ts
-- [ ] T025 Broadcast delivery service methods in src/services/slack.service.ts
-- [ ] T026 [P] Dry-run simulation service in src/services/broadcast-dry-run.service.ts
+- [x] T024 Channel resolution service methods in src/services/slack.service.ts
+- [x] T025 Broadcast delivery service methods in src/services/slack.service.ts
+- [x] T026 [P] Dry-run simulation service in src/services/broadcast-dry-run.service.ts
 
 ### CLI Commands
 

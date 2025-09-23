@@ -5,6 +5,25 @@
  * This model encapsulates all CLI configuration and validation logic.
  */
 
+/**
+ * CLI options for broadcast command
+ */
+export interface BroadcastCommandArgs {
+  listName: string
+  message: string
+  config?: string
+  dryRun?: boolean
+  verbose?: boolean
+  token?: string
+}
+
+/**
+ * CLI options for list-channels command
+ */
+export interface ListCommandArgs {
+  config?: string
+}
+
 export interface CommandLineOptionsParams {
   command: string
   channelId?: string | undefined
@@ -16,6 +35,14 @@ export interface CommandLineOptionsParams {
   logLevel?: string | undefined
   timeout?: number | undefined
   retries?: number | undefined
+  // Broadcast command options
+  configPath?: string | undefined
+  channelList?: string | undefined
+  dryRun?: boolean | undefined
+  maxConcurrency?: number | undefined
+  maxRetries?: number | undefined
+  // List channels command options
+  format?: string | undefined
 }
 
 export class CommandLineOptions {
@@ -29,6 +56,14 @@ export class CommandLineOptions {
   private readonly _logLevel: string | undefined
   private readonly _timeout: number
   private readonly _retries: number
+  // Broadcast command properties
+  private readonly _configPath: string | undefined
+  private readonly _channelList: string | undefined
+  private readonly _dryRun: boolean
+  private readonly _maxConcurrency: number
+  private readonly _maxRetries: number | undefined
+  // List channels command properties
+  private readonly _format: string | undefined
 
   constructor(params: CommandLineOptionsParams) {
     this.validateCommand(params.command)
@@ -43,6 +78,14 @@ export class CommandLineOptions {
     this._logLevel = params.logLevel
     this._timeout = params.timeout || 10000 // 10 second default
     this._retries = params.retries || 3 // 3 retries default
+    // Broadcast options
+    this._configPath = params.configPath
+    this._channelList = params.channelList
+    this._dryRun = params.dryRun || false
+    this._maxConcurrency = params.maxConcurrency || 5
+    this._maxRetries = params.maxRetries
+    // List channels options
+    this._format = params.format
   }
 
   /**
@@ -116,10 +159,66 @@ export class CommandLineOptions {
   }
 
   /**
+   * Get the configuration file path
+   */
+  get configPath(): string | undefined {
+    return this._configPath
+  }
+
+  /**
+   * Get the channel list name
+   */
+  get channelList(): string | undefined {
+    return this._channelList
+  }
+
+  /**
+   * Check if dry run mode is enabled
+   */
+  get dryRun(): boolean {
+    return this._dryRun
+  }
+
+  /**
+   * Get the maximum concurrency for broadcast
+   */
+  get maxConcurrency(): number {
+    return this._maxConcurrency
+  }
+
+  /**
+   * Get the maximum retries for broadcast
+   */
+  get maxRetries(): number | undefined {
+    return this._maxRetries
+  }
+
+  /**
+   * Get the output format
+   */
+  get format(): string | undefined {
+    return this._format
+  }
+
+  /**
    * Check if this is a send-message command
    */
   get isSendMessageCommand(): boolean {
     return this._command === 'send-message'
+  }
+
+  /**
+   * Check if this is a broadcast command
+   */
+  get isBroadcastCommand(): boolean {
+    return this._command === 'broadcast'
+  }
+
+  /**
+   * Check if this is a list-channels command
+   */
+  get isListChannelsCommand(): boolean {
+    return this._command === 'list-channels'
   }
 
   /**
@@ -140,17 +239,50 @@ export class CommandLineOptions {
   }
 
   /**
+   * Check if all required arguments for broadcast are present
+   */
+  get hasRequiredBroadcastArgs(): boolean {
+    if (!this.isBroadcastCommand) {
+      return true // Not applicable for other commands
+    }
+    return !!(this._channelList && this._message)
+  }
+
+  /**
+   * Check if all required arguments are present for the current command
+   */
+  get hasRequiredArgs(): boolean {
+    if (this.isSendMessageCommand) {
+      return this.hasRequiredSendMessageArgs
+    }
+    if (this.isBroadcastCommand) {
+      return this.hasRequiredBroadcastArgs
+    }
+    if (this.isListChannelsCommand) {
+      return true // No required args for list-channels
+    }
+    return true
+  }
+
+  /**
    * Get missing required arguments for send-message command
    */
   get missingRequiredArgs(): string[] {
-    if (!this.isSendMessageCommand) {
-      return []
+    if (this.isSendMessageCommand) {
+      const missing: string[] = []
+      if (!this._channelId) missing.push('channelId')
+      if (!this._message) missing.push('message')
+      return missing
     }
 
-    const missing: string[] = []
-    if (!this._channelId) missing.push('channelId')
-    if (!this._message) missing.push('message')
-    return missing
+    if (this.isBroadcastCommand) {
+      const missing: string[] = []
+      if (!this._channelList) missing.push('channelList')
+      if (!this._message) missing.push('message')
+      return missing
+    }
+
+    return []
   }
 
   /**
@@ -203,6 +335,40 @@ export class CommandLineOptions {
       }
     }
 
+    if (this.isBroadcastCommand) {
+      if (!this._channelList) {
+        errors.push('Missing required argument: channelList')
+      }
+
+      if (!this._message) {
+        errors.push('Missing required argument: message')
+      } else if (!this.isMessageValid) {
+        const trimmed = this._message.trim()
+        if (trimmed.length === 0) {
+          errors.push('Message cannot be empty or whitespace only')
+        } else if (trimmed.length > 40000) {
+          errors.push('Message cannot exceed 40,000 characters')
+        }
+      }
+
+      if (this._maxConcurrency < 1 || this._maxConcurrency > 20) {
+        errors.push('Max concurrency must be between 1 and 20')
+      }
+
+      if (
+        this._maxRetries !== undefined &&
+        (this._maxRetries < 0 || this._maxRetries > 10)
+      ) {
+        errors.push('Max retries must be between 0 and 10')
+      }
+    }
+
+    if (this.isListChannelsCommand) {
+      if (this._format && !['table', 'json', 'yaml'].includes(this._format)) {
+        errors.push('Format must be one of: table, json, yaml')
+      }
+    }
+
     if (this._timeout < 1000) {
       errors.push('Timeout must be at least 1000ms (1 second)')
     }
@@ -229,7 +395,7 @@ export class CommandLineOptions {
       throw new Error('Command is required and must be a string')
     }
 
-    const validCommands = ['send-message']
+    const validCommands = ['send-message', 'broadcast', 'list-channels']
     if (!validCommands.includes(command)) {
       throw new Error(
         `Invalid command: ${command}. Valid commands: ${validCommands.join(', ')}`
@@ -249,6 +415,34 @@ export class CommandLineOptions {
       command: 'send-message',
       channelId,
       message,
+      ...options,
+    })
+  }
+
+  /**
+   * Create CommandLineOptions for broadcast command
+   */
+  static forBroadcast(
+    channelList: string,
+    message: string,
+    options?: Partial<CommandLineOptionsParams>
+  ): CommandLineOptions {
+    return new CommandLineOptions({
+      command: 'broadcast',
+      channelList,
+      message,
+      ...options,
+    })
+  }
+
+  /**
+   * Create CommandLineOptions for list-channels command
+   */
+  static forListChannels(
+    options?: Partial<CommandLineOptionsParams>
+  ): CommandLineOptions {
+    return new CommandLineOptions({
+      command: 'list-channels',
       ...options,
     })
   }
@@ -304,6 +498,14 @@ export class CommandLineOptions {
     logLevel?: string | undefined
     timeout?: number | undefined
     retries?: number | undefined
+    // Broadcast options
+    configPath?: string | undefined
+    channelList?: string | undefined
+    dryRun?: boolean | undefined
+    maxConcurrency?: number | undefined
+    maxRetries?: number | undefined
+    // List channels options
+    format?: string | undefined
   }): CommandLineOptions {
     return new CommandLineOptions({
       command: args.command || 'send-message',
@@ -316,6 +518,14 @@ export class CommandLineOptions {
       logLevel: args.logLevel,
       timeout: args.timeout,
       retries: args.retries,
+      // Broadcast options
+      configPath: args.configPath,
+      channelList: args.channelList,
+      dryRun: args.dryRun,
+      maxConcurrency: args.maxConcurrency,
+      maxRetries: args.maxRetries,
+      // List channels options
+      format: args.format,
     })
   }
 

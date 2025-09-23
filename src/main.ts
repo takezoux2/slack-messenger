@@ -8,6 +8,8 @@
 import 'dotenv/config'
 import { CliService } from './services/cli.service.js'
 import { SendMessageCommand } from './commands/send-message.command.js'
+import { BroadcastMessageCommand } from './commands/broadcast-message.command.js'
+import { ListChannelsCommand } from './commands/list-channels.command.js'
 import { ErrorHandlerService } from './services/error-handler.service.js'
 
 /**
@@ -105,6 +107,11 @@ async function main(): Promise<void> {
           console.error('\nUse --help for usage information.')
           process.exit(1)
         }
+        if (error.includes('Missing required argument: channelList')) {
+          console.error("error: missing required argument 'channel-list'")
+          console.error('\nUse --help for usage information.')
+          process.exit(1)
+        }
         if (error.includes('Missing required argument: message')) {
           console.error('Validation error: Message cannot be empty')
           process.exit(1)
@@ -130,6 +137,14 @@ async function main(): Promise<void> {
     switch (options.command) {
       case 'send-message':
         await executeSendMessageCommand(options, errorHandler)
+        break
+
+      case 'broadcast':
+        await executeBroadcastCommand(options, errorHandler)
+        break
+
+      case 'list-channels':
+        await executeListChannelsCommand(options, errorHandler)
         break
 
       default:
@@ -191,6 +206,88 @@ async function executeSendMessageCommand(
     const formattedError = errorHandler.handleError(error, {
       command: 'send-message',
       channelId: options.channelId,
+      operation: 'command-execution',
+    })
+
+    console.error(formattedError.message)
+    if (formattedError.details && options.verbose) {
+      formattedError.details.forEach(detail => console.error(detail))
+    }
+
+    process.exit(formattedError.exitCode)
+  }
+}
+
+/**
+ * Execute the broadcast command
+ */
+async function executeBroadcastCommand(
+  options: any,
+  errorHandler: ErrorHandlerService
+): Promise<void> {
+  try {
+    // Create and execute the command
+    const command = BroadcastMessageCommand.fromEnvironment({
+      verboseLogging: options.verbose,
+    })
+
+    const result = await command.execute(options)
+
+    // Output results
+    result.output.forEach(line => console.log(line))
+
+    // Handle success/failure
+    if (result.success) {
+      process.exit(0)
+    } else {
+      // Error was already output, just exit with the code
+      process.exit(result.exitCode)
+    }
+  } catch (error) {
+    // Handle command execution errors
+    const formattedError = errorHandler.handleError(error, {
+      command: 'broadcast',
+      operation: 'command-execution',
+    })
+
+    console.error(formattedError.message)
+    if (formattedError.details && options.verbose) {
+      formattedError.details.forEach(detail => console.error(detail))
+    }
+
+    process.exit(formattedError.exitCode)
+  }
+}
+
+/**
+ * Execute the list-channels command
+ */
+async function executeListChannelsCommand(
+  options: any,
+  errorHandler: ErrorHandlerService
+): Promise<void> {
+  try {
+    // Create and execute the command
+    const command = ListChannelsCommand.fromEnvironment({
+      verboseLogging: options.verbose,
+    })
+
+    const result = await command.execute(options)
+
+    // Output results
+    result.output.forEach(line => console.log(line))
+
+    // Handle success/failure
+    if (result.success) {
+      process.exit(0)
+    } else {
+      // Error was already output, just exit with the code
+      process.exit(result.exitCode)
+    }
+  } catch (error) {
+    // Handle command execution errors
+    const formattedError = errorHandler.handleError(error, {
+      command: 'list-channels',
       operation: 'command-execution',
     })
 

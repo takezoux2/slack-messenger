@@ -6,6 +6,8 @@
  */
 
 import { MessageDeliveryResult } from '../models/message-delivery-result.js'
+import type { BroadcastResult } from '../models/broadcast-result'
+import type { ChannelDeliveryResult } from '../models/channel-delivery-result'
 
 export interface ErrorHandlerConfig {
   verboseLogging?: boolean
@@ -158,29 +160,302 @@ export class ErrorHandlerService {
   }
 
   /**
-   * Format network errors
+   * Handle broadcast result errors and aggregation
    */
-  formatNetworkError(error: Error, context?: ErrorContext): FormattedError {
-    const message = `Network error: ${error.message}`
-    const details = this.config.verboseLogging
-      ? [
-          'Check your internet connection',
-          'Verify Slack API endpoints are accessible',
-          'Consider increasing timeout values',
-        ]
-      : undefined
+  handleBroadcastErrors(
+    result: BroadcastResult,
+    context?: ErrorContext
+  ): FormattedError {
+    const failedResults = result.deliveryResults.filter(
+      r => r.status === 'failed'
+    )
+    const skippedResults = result.deliveryResults.filter(
+      r => r.status === 'skipped'
+    )
+    const successCount = result.deliveryResults.filter(
+      r => r.status === 'success'
+    ).length
+
+    // Aggregate errors by type
+    const errorSummary = this.aggregateDeliveryErrors(result.deliveryResults)
+
+    let message: string
+    let exitCode: number
+
+    if (result.overallStatus === 'success') {
+      message = `Broadcast completed successfully to all ${result.totalChannels} channels`
+      exitCode = 0
+    } else if (result.overallStatus === 'partial') {
+      message = `Broadcast partially successful: ${successCount}/${result.totalChannels} channels delivered`
+      exitCode = 1
+    } else {
+      message = `Broadcast failed: No messages delivered to ${result.totalChannels} channels`
+      exitCode = 2
+    }
+
+    const details: string[] = []
+
+    if (failedResults.length > 0) {
+      details.push(`${failedResults.length} channels failed:`)
+      details.push(...this.formatChannelErrors(failedResults, 'failed'))
+    }
+
+    if (skippedResults.length > 0) {
+      details.push(`${skippedResults.length} channels skipped:`)
+      details.push(...this.formatChannelErrors(skippedResults, 'skipped'))
+    }
+
+    if (this.config.verboseLogging && errorSummary.length > 0) {
+      details.push('')
+      details.push('Error Summary:')
+      details.push(...errorSummary)
+    }
 
     return {
       message,
-      details,
-      exitCode: 4,
+      details: details.length > 0 ? details : undefined,
+      exitCode,
       shouldExit: this.config.exitOnError,
       context: {
         ...context,
         timestamp: new Date(),
-        operation: 'network',
+        operation: 'broadcast',
+        metadata: {
+          ...context?.metadata,
+          totalChannels: result.totalChannels,
+          successCount,
+          failedCount: failedResults.length,
+          skippedCount: skippedResults.length,
+          overallStatus: result.overallStatus,
+        },
       },
     }
+  }
+
+  /**
+   * Aggregate delivery errors by type and frequency
+   */
+  aggregateDeliveryErrors(deliveryResults: ChannelDeliveryResult[]): string[] {
+    const errorCounts = new Map<string, number>()
+    const errorExamples = new Map<string, string[]>()
+
+    for (const result of deliveryResults) {
+      if (result.status !== 'success' && result.error) {
+        const errorType = result.error.type || 'unknown'
+        const errorMessage = result.error.message || 'Unknown error'
+        const channelName = result.channel.name
+
+        // Count occurrences
+        errorCounts.set(errorType, (errorCounts.get(errorType) || 0) + 1)
+
+        // Collect examples (limit to 3 per error type)
+        if (!errorExamples.has(errorType)) {
+          errorExamples.set(errorType, [])
+        }
+        const examples = errorExamples.get(errorType)!
+        if (examples.length < 3) {
+          examples.push(`#${channelName}: ${errorMessage}`)
+        }
+      }
+    }
+
+    const summary: string[] = []
+    for (const [errorType, count] of errorCounts.entries()) {
+      const examples = errorExamples.get(errorType) || []
+      summary.push(`• ${errorType}: ${count} channel${count === 1 ? '' : 's'}`)
+      if (this.config.verboseLogging && examples.length > 0) {
+        examples.forEach(example => summary.push(`  - ${example}`))
+        if (count > examples.length) {
+          summary.push(`  - ... and ${count - examples.length} more`)
+        }
+      }
+    }
+
+    return summary
+  }
+
+  /**
+   * Format individual channel errors for display
+   */
+  formatChannelErrors(
+    results: ChannelDeliveryResult[],
+    status: 'failed' | 'skipped'
+  ): string[] {
+    const formatted: string[] = []
+
+    for (const result of results) {
+      const channelName = result.channel.name
+      const errorMessage =
+        result.error?.message || `Channel ${status} without specific reason`
+
+      if (this.config.verboseLogging) {
+        formatted.push(`  • #${channelName}: ${errorMessage}`)
+      } else {
+        // In non-verbose mode, group by error type
+        const errorType = result.error?.type || 'unknown'
+        formatted.push(`  • #${channelName} (${errorType})`)
+      }
+    }
+
+    return formatted
+  }
+
+  /**
+   * Handle configuration errors for broadcast commands
+   */
+  handleConfigurationError(
+    error: Error,
+    configPath?: string,
+    context?: ErrorContext
+  ): FormattedError {
+    let message: string
+    const details: string[] = []
+
+    if (error.message.includes('not found')) {
+      message = `Configuration file not found: ${configPath || 'default location'}`
+      details.push('Create a YAML file with channel lists:')
+      details.push('  channel_lists:')
+      details.push('    my-team:')
+      details.push('      - "#general"')
+      details.push('      - "#announcements"')
+      details.push('')
+      details.push('Or specify a different path with --config <path>')
+    } else if (
+      error.message.includes('parse') ||
+      error.message.includes('YAML')
+    ) {
+      message = `Invalid YAML configuration: ${error.message}`
+      details.push('Check your YAML syntax:')
+      details.push('  - Use proper indentation (spaces, not tabs)')
+      details.push('  - Ensure list items start with "-"')
+      details.push('  - Quote channel names if they contain special characters')
+    } else {
+      message = `Configuration error: ${error.message}`
+    }
+
+    return {
+      message,
+      details: details.length > 0 ? details : undefined,
+      exitCode: 3,
+      shouldExit: this.config.exitOnError,
+      context: {
+        ...context,
+        timestamp: new Date(),
+        operation: 'configuration',
+        metadata: {
+          ...context?.metadata,
+          configPath,
+        },
+      },
+    }
+  }
+
+  /**
+   * Format channel list validation errors
+   */
+  formatChannelListError(
+    listName: string,
+    availableLists?: string[],
+    context?: ErrorContext
+  ): FormattedError {
+    const message = `Channel list "${listName}" not found in configuration`
+
+    const details: string[] = []
+    if (availableLists && availableLists.length > 0) {
+      details.push('Available lists:')
+      availableLists.forEach(list => details.push(`  - ${list}`))
+      details.push('')
+      details.push(
+        'Use: slack-messenger list-channels to see all available lists'
+      )
+    } else {
+      details.push('No channel lists found in configuration')
+      details.push('Add channel lists to your configuration file')
+    }
+
+    return {
+      message,
+      details,
+      exitCode: 1,
+      shouldExit: this.config.exitOnError,
+      context: {
+        ...context,
+        timestamp: new Date(),
+        operation: 'list-validation',
+        metadata: {
+          ...context?.metadata,
+          requestedList: listName,
+          availableListCount: availableLists?.length || 0,
+        },
+      },
+    }
+  }
+
+  /**
+   * Create comprehensive error report for broadcast operations
+   */
+  createBroadcastErrorReport(
+    result: BroadcastResult,
+    context?: ErrorContext
+  ): {
+    summary: string
+    details: string[]
+    recommendations: string[]
+    exitCode: number
+  } {
+    const errors = this.handleBroadcastErrors(result, context)
+    const recommendations: string[] = []
+
+    // Analyze error patterns and provide recommendations
+    const errorTypes = this.analyzeErrorPatterns(result.deliveryResults)
+
+    if (errorTypes.has('not_in_channel')) {
+      recommendations.push(
+        'Add the bot to private channels or remove them from the list'
+      )
+    }
+
+    if (errorTypes.has('channel_not_found')) {
+      recommendations.push('Verify channel names and IDs in your configuration')
+    }
+
+    if (errorTypes.has('is_archived')) {
+      recommendations.push('Remove archived channels from your configuration')
+    }
+
+    if (errorTypes.has('rate_limited')) {
+      recommendations.push(
+        'Reduce broadcast frequency or implement longer delays'
+      )
+    }
+
+    if (errorTypes.has('network_error')) {
+      recommendations.push('Check network connectivity and Slack API status')
+    }
+
+    return {
+      summary: errors.message,
+      details: errors.details || [],
+      recommendations,
+      exitCode: errors.exitCode,
+    }
+  }
+
+  /**
+   * Analyze error patterns in delivery results
+   */
+  private analyzeErrorPatterns(
+    deliveryResults: ChannelDeliveryResult[]
+  ): Set<string> {
+    const errorTypes = new Set<string>()
+
+    for (const result of deliveryResults) {
+      if (result.error?.type) {
+        errorTypes.add(result.error.type)
+      }
+    }
+
+    return errorTypes
   }
 
   /**

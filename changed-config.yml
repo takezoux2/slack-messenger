@@ -1,0 +1,5 @@
+channel_lists:
+  changed-list:
+    name: 'Changed Test List'
+    channels:
+      - '#changed-channel'

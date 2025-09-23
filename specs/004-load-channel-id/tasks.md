@@ -94,22 +94,22 @@
 
 ### CLI Commands
 
-- [ ] T027 Broadcast command implementation in src/commands/broadcast-message.command.ts
-- [ ] T028 List-channels command implementation in src/commands/list-channels.command.ts
-- [ ] T029 CLI argument parsing for broadcast options in src/services/cli.service.ts
+- [x] T027 Broadcast command implementation in src/commands/broadcast-message.command.ts
+- [x] T028 List-channels command implementation in src/commands/list-channels.command.ts
+- [x] T029 CLI argument parsing for broadcast options in src/services/cli.service.ts
 
 ## Phase 3.4: Integration
 
-- [ ] T030 YAML configuration file loading integration in src/config/app-config.ts
-- [ ] T031 Multi-channel delivery orchestration in src/services/slack.service.ts
-- [ ] T032 Error aggregation and reporting in src/services/error-handler.service.ts
-- [ ] T033 Console output formatting for broadcast results in src/services/console.service.ts
+- [x] T030 YAML configuration file loading integration in src/config/app-config.ts
+- [x] T031 Multi-channel delivery orchestration in src/services/slack.service.ts
+- [x] T032 Error aggregation and reporting in src/services/error-handler.service.ts
+- [x] T033 Console output formatting for broadcast results in src/services/console.service.ts
 
 ## Phase 3.5: Polish
 
-- [ ] T034 [P] Unit tests for YAML validation in tests/unit/yaml-validation.test.ts
-- [ ] T035 [P] Unit tests for channel resolution in tests/unit/channel-resolution.test.ts
-- [ ] T036 [P] Error handling edge cases in tests/unit/error-handling.test.ts
+- [x] T034 [P] Unit tests for YAML validation in tests/unit/yaml-validation.test.ts
+- [x] T035 [P] Unit tests for channel resolution in tests/unit/channel-resolution.test.ts
+- [x] T036 [P] Error handling edge cases in tests/unit/error-handling.test.ts
 
 ## Dependencies
 

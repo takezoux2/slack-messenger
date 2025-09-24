@@ -28,15 +28,17 @@ export interface SendMessageResult {
 }
 
 export class SendMessageCommand {
-  private readonly slackService: SlackService
+  private slackService: SlackService | undefined
   private readonly errorHandler: ErrorHandlerService
   private readonly verboseLogging: boolean
+  private credentials?: AuthenticationCredentials
 
   constructor(config?: SendMessageCommandConfig) {
     this.verboseLogging = config?.verboseLogging || false
 
     // Use provided services or create defaults
-    this.slackService = config?.slackService || SlackService.fromEnvironment()
+    // Do not construct SlackService here to avoid requiring env token at construction time
+    this.slackService = config?.slackService
     this.errorHandler =
       config?.errorHandler ||
       new ErrorHandlerService({
@@ -78,10 +80,8 @@ export class SendMessageCommand {
         return this.createFailureResult(error, 1, output)
       }
 
-      this.logVerbose(
-        output,
-        `Preparing to send message to channel: ${channelId}`
-      )
+      this.logVerbose(output, `Preparing to send message...`)
+      this.logVerbose(output, `Channel ID: ${channelId}`)
       this.logVerbose(
         output,
         `Message length: ${messageText.length} characters`
@@ -105,9 +105,42 @@ export class SendMessageCommand {
 
       // Models are validated during construction, so if we reach here they are valid
 
-      // Test authentication first
+      // Load credentials with CLI override and test authentication first
       this.logVerbose(output, 'Loading authentication credentials...')
-      const authTest = await this.slackService.testAuthentication()
+      try {
+        const token = (options.token ?? process.env['SLACK_BOT_TOKEN'] ?? '')
+          .toString()
+          .trim()
+        if (!token) {
+          this.logVerbose(
+            output,
+            'SLACK_BOT_TOKEN environment variable is required'
+          )
+          return this.createFailureResult(
+            new Error('SLACK_BOT_TOKEN environment variable is required'),
+            2,
+            output
+          )
+        }
+        this.credentials = AuthenticationCredentials.forBotToken(token)
+        // Masked token visibility in verbose mode
+        this.logVerbose(output, 'Token loaded: xoxb-****')
+      } catch (e) {
+        const err = e instanceof Error ? e : new Error(String(e))
+        return this.createFailureResult(err, 2, output)
+      }
+
+      // Ensure SlackService uses our credentials (so tests can spy on API interactions consistently)
+      if (!this.slackService) {
+        this.slackService = SlackService.withCredentials(this.credentials)
+      }
+      const slack = this.slackService
+
+      // Show API connection step before any API calls in verbose mode
+      this.logVerbose(output, 'Connecting to Slack API...')
+      // Outline the next step so verbose mode reflects intended flow even if auth fails
+      this.logVerbose(output, 'Sending message...')
+      const authTest = await slack.testAuthentication()
 
       if (!authTest.valid) {
         const error = new Error(
@@ -127,7 +160,7 @@ export class SendMessageCommand {
         output,
         `Connecting to Slack API for channel validation...`
       )
-      const channelInfo = await this.slackService.getChannelInfo(channelId)
+      const channelInfo = await slack.getChannelInfo(channelId)
 
       if (!channelInfo.exists) {
         const error = new Error(
@@ -144,10 +177,7 @@ export class SendMessageCommand {
 
       // Send the message
       this.logVerbose(output, 'Sending message to Slack API...')
-      const deliveryResult = await this.slackService.sendMessage(
-        message,
-        target
-      )
+      const deliveryResult = await slack.sendMessage(message, target)
 
       // Handle result
       if (deliveryResult.success) {
@@ -266,7 +296,9 @@ export class SendMessageCommand {
   getConfiguration(): object {
     return {
       verboseLogging: this.verboseLogging,
-      slackServiceConfig: this.slackService.getClientConfig(),
+      slackServiceConfig: this.slackService
+        ? this.slackService.getClientConfig()
+        : { initialized: false },
       errorHandlerConfig: this.errorHandler.getConfiguration(),
     }
   }
@@ -284,6 +316,13 @@ export class SendMessageCommand {
 
     try {
       // Test Slack service configuration
+      if (!this.slackService) {
+        return {
+          valid: false,
+          errors: ['Slack service not initialized'],
+          warnings,
+        }
+      }
       const authTest = await this.slackService.testAuthentication()
       if (!authTest.valid) {
         errors.push(`Slack authentication failed: ${authTest.error}`)

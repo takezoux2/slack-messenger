@@ -293,8 +293,9 @@ export class CommandLineOptions {
       return true // Not provided, so not invalid
     }
 
-    // Slack channel ID format validation
-    const channelIdPattern = /^[CGD][A-Z0-9]{9,10}$/i
+    // Slack public channel ID format validation: starts with 'C' and 10-13 chars total
+    // Accepts IDs like C1234567890 and longer variants
+    const channelIdPattern = /^C[A-Z0-9]{9,20}$/i
     return channelIdPattern.test(this._channelId)
   }
 

@@ -223,7 +223,7 @@ channel_lists:
   static load(): Configuration {
     // For console app initialization, we use constitutional defaults
     // In a real app, this might load from env vars or config files
-    const nodeVersion = process.env['NODE_VERSION_REQUIREMENT'] || '>=21.0.0'
+    const nodeVersion = process.env['NODE_VERSION_REQUIREMENT'] || '>=22.0.0'
     const strict = true // Constitutional requirement
     const testFramework = 'vitest' // Constitutional requirement
     const buildTarget = 'dist' // Per specification

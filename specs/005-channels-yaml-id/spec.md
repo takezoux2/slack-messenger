@@ -5,6 +5,42 @@
 **Status**: Draft  
 **Input**: User description: "channels.yamlに、名前をユーザーIDにマッピングする"mension"設定を追加し、メッセージ中で"@{name}"が記載されていてnameのマップが指定されている場合は、slackのメンションに置き換えて送信して。マップが存在しない場合は、そのまま送って"
 
+## Clarifications
+
+### Session 2025-09-30
+
+- Q: How should the no-brace placeholder form @name be recognized (what counts as a valid boundary after the name)? → A: Space or end-of-line
+
+- Q: What exact character set should be allowed for mapping keys (the placeholder name)? → A: Any visible non-space characters until boundary
+
+- Q: How should duplicate mapping keys in channels.yaml be handled? → A: Last definition wins (silently overrides earlier)
+
+- Q: What is the case-sensitivity policy for mapping key lookups? → A: Case-sensitive (exact match required)
+
+- Q: Is author-facing feedback required to summarize which placeholders were replaced vs left unchanged? → A: Always output a summary to stdout after send
+
+- Q: How should an empty placeholder `@{}` be handled? → A: Ignore (treat as literal text)
+
+- Q: Should replacements occur inside code blocks or quoted text? → A: No; only in standard text regions
+
+- Q: What is the scoping model for mention mappings in channels.yaml? → A: Single global mapping at root; applies to all messages/channels uniformly
+  \n+- Q: What fixed output format should the post-send summary use? → A: Multi-line human-readable (3 lines: Replaced:/Unresolved:/Total:)
+  \n+- Q: What YAML key name will store the global mention mapping? → A: mentions
+
+Applied: Mapping keys accept any visible non-whitespace Unicode characters. For brace form `@{name}` the key is any sequence of one or more characters excluding `}`. For no-brace form `@name` the key is any sequence of one or more non-whitespace characters terminated by a space or end-of-line. This broad rule enables flexible role/style keys (e.g., `dev.ops-lead+2025`). Empty keys are invalid (still clarifying handling if encountered as `@{}` placeholder).
+
+Applied: The no-brace form `@name` is a placeholder only when immediately followed by exactly one space OR the end-of-line/string boundary. It is NOT recognized when followed by punctuation, another word character, or other symbols. Punctuation-separated forms (e.g., `@alice,`) remain literal text. Acceptance scenarios and FR-021 updated; edge case bullets adjusted to remove ambiguity.
+
+Applied: When duplicate mapping keys appear, only the last occurrence in the configuration is used; earlier occurrences are ignored without producing an error or warning. This ensures deterministic behavior while allowing authors to override earlier definitions implicitly.
+
+Applied: Mapping key lookups are case-sensitive. `Alice` and `alice` are distinct keys; authors must reference placeholders using the exact declared casing. This avoids unexpected collisions and preserves intentional stylistic distinctions. No normalization is performed.
+
+Applied: After every message send (including dry-run modes if they perform resolution), the system outputs a deterministic summary to stdout listing: (a) each unique replaced placeholder key with count of replacements, (b) each unresolved placeholder token (literal form) that remained, and (c) total replacements performed. If no placeholders present, outputs an empty-summary line (e.g., "Placeholders: none").
+
+Applied: The empty placeholder form `@{}` is not a valid placeholder token. It is left unchanged in the message, produces no replacement, and is not counted as an unresolved placeholder in the summary (it is simply ignored by the resolver). This prevents accidental noise from stray braces.
+
+Applied: Placeholder resolution is skipped inside: (1) fenced code blocks delimited by triple backticks `...`, (2) inline code spans enclosed in single backticks, and (3) block quotes (lines beginning with ">"). Placeholders appearing in these regions remain literal, are not counted as replaced, and are not reported as unresolved to keep summaries focused on actionable content.
+
 ## Execution Flow (main)
 
 ```
@@ -73,26 +109,31 @@ As a person composing a broadcast or direct message using the existing messaging
 6. **Given** a mapping exists for "team-lead" and the message contains adjacent punctuation like `(@{team-lead})`, **When** the message is sent, **Then** only the placeholder is replaced and punctuation is preserved.
 7. **Given** a mapping exists and the message contains a similar substring not following an accepted placeholder pattern (e.g., `@{alice_extra}` with only "alice" mapped), **When** sent, **Then** only exact placeholder tokens with matching names are replaced.
 8. **Given** a mapping exists and a message contains an email address `user@example.com`, **When** the message is sent, **Then** the email address is NOT altered (no false positive replacement).
+9. **Given** a mapping exists for "alice" and the message line ends with `@alice` immediately before a newline (no trailing space), **When** the message is sent, **Then** `@alice` at end-of-line is treated as a valid no-brace placeholder and replaced with the proper mention (newline preserved).
+10. **Given** a mapping exists for "alice" and the message contains `@alice,` (comma directly after), **When** the message is sent, **Then** `@alice,` is NOT treated as a placeholder and remains unchanged (still allowing brace form `@{alice}` for replacement if present elsewhere).
+11. **Given** a message containing two `@{alice}` placeholders and one unmapped `@{unknown}` token, **When** the message is sent, **Then** stdout includes a summary indicating `alice: 2 replacements`, lists `@{unknown}` as unresolved, and reports `total_replacements=2`.
 
 ### Edge Cases
 
-- Placeholder name appears but is empty: `@{}` → [NEEDS CLARIFICATION: Should empty names be ignored, produce an error, or left literally unchanged?]
-- Name contains characters other than letters/digits/hyphen/underscore: [NEEDS CLARIFICATION: Allowed character set for mapping keys?]
-- Duplicate mapping keys in the configuration: [NEEDS CLARIFICATION: Should later entries override earlier, or be rejected?]
-- Very large number of placeholders in a single message (performance / size limits): [NEEDS CLARIFICATION: Any limit on replacements per message?]
-- Placeholder appears inside code block or quoted text: [NEEDS CLARIFICATION: Should replacements occur everywhere or only in standard text regions?]
-- Case sensitivity: `@{Alice}` vs `@{alice}` / `@Alice ` vs `@alice `: [NEEDS CLARIFICATION: Are mapping lookups case-sensitive?]
-- No-brace form at end of line without trailing space: `@alice\n` → [NEEDS CLARIFICATION: Is this considered a valid placeholder or must a space explicitly follow?]
-- No-brace form followed by punctuation instead of space (e.g., `@alice,`) → [NEEDS CLARIFICATION: Should punctuation be accepted or is the space mandatory exactly as specified?]
+- Placeholder name appears but is empty: `@{}` → Ignored: treated as literal text (no replacement, not listed as unresolved, not counted toward totals).
+- Mapping key allowed characters: any visible non-whitespace characters; brace form forbids `}` inside the key; no-brace form ends at space or end-of-line. Empty key not permitted.
+- Duplicate mapping keys in the configuration: Last definition wins silently; earlier entries ignored (no warning or error).
+- Very large number of placeholders in a single message: No artificial limit; system processes all occurrences subject only to overall Slack message length constraints.
+- Placeholder appears inside code block or quoted text: No replacements performed; tokens left literal and omitted from unresolved summary counts.
+- Case sensitivity: Lookups are case-sensitive; `Alice` and `alice` are different mapping keys and must be referenced exactly as declared.
+- No-brace form at end of line without trailing space: `@alice\n` → Treated as a valid placeholder (end-of-line is an accepted boundary).
+- No-brace form followed by punctuation instead of space (e.g., `@alice,`) → Not a placeholder; punctuation does not satisfy the boundary rule.
 - Consecutive placeholders `@alice @bob ` mixing forms and spacing—ensure each independently resolved.
 - Avoid matching email/usernames like `@alice_dev` unless braces used or exact key plus space criterion met.
+  // Scope clarification
+- Mention mapping is a single global dictionary; no per-channel override or channel-specific shadowing is supported (explicitly out-of-scope for this feature).
 
 ## Requirements _(mandatory)_
 
 ### Functional Requirements
 
 - **FR-001**: System MUST allow defining a set of name → user identifier mappings within the existing channel configuration file (referred to as "mention mapping").
--- **FR-002**: System MUST recognize placeholder tokens in message text formatted either as `@{name}` OR as `@name ` (no braces, single trailing space) where `name` corresponds exactly to a configured mapping key.
+  -- **FR-002**: System MUST recognize placeholder tokens in message text formatted either as `@{name}` OR as `@name ` (no braces, single trailing space) where `name` corresponds exactly to a configured mapping key.
 - **FR-003**: System MUST replace each recognized placeholder token with a valid user mention for the mapped user identifier prior to sending the message.
 - **FR-004**: System MUST leave any placeholder token unchanged if no mapping for its `name` exists.
 - **FR-005**: System MUST perform replacements consistently for all occurrences of the same placeholder within a single message.
@@ -104,15 +145,23 @@ As a person composing a broadcast or direct message using the existing messaging
 - **FR-011**: System MUST avoid partial replacements (either a full placeholder is replaced or it is fully preserved).
 - **FR-012**: System SHOULD ensure that adding the mention mapping feature does not require authors to change existing messages that do not use placeholders (backwards compatibility).
 - **FR-013**: System MUST treat unmapped placeholders as normal text without generating an error or warning visible to message recipients.
-- **FR-014**: System SHOULD make it possible for authors to know which placeholders were replaced vs. left unchanged (e.g., via summary) [NEEDS CLARIFICATION: Is author-facing feedback required?]
--- **FR-015**: System MUST not modify any message content outside the defined placeholder patterns.
--- **FR-020**: System MUST preserve exactly one space after the mention when replacing the no-brace form `@name `; the space remains after the inserted mention.
--- **FR-021**: System MUST NOT treat `@name` lacking both braces and trailing space as a placeholder (unless clarified otherwise) [NEEDS CLARIFICATION: Should end-of-line or punctuation be accepted as boundary?].
--- **FR-022**: System MUST avoid replacing substrings inside email addresses or longer identifiers containing `@name` unless they match an accepted pattern boundary.
-- **FR-016**: System SHOULD define a clear validation rule for acceptable mapping keys [NEEDS CLARIFICATION: What exact key character constraints?].
-- **FR-017**: System SHOULD define behavior for conflicting/duplicate keys [NEEDS CLARIFICATION: Override or error?].
-- **FR-018**: System SHOULD define case-sensitivity policy for keys [NEEDS CLARIFICATION: Case-sensitive or insensitive lookups?].
-- **FR-019**: System SHOULD specify maximum number of mappings or placeholders per message if limits exist [NEEDS CLARIFICATION: Are there limits?].
+- **FR-014**: System MUST always output a post-send summary to stdout indicating: unique replaced keys with counts, unresolved placeholder tokens (if any), and total replacements.
+  -- **FR-015**: System MUST not modify any message content outside the defined placeholder patterns.
+  -- **FR-020**: System MUST preserve exactly one space after the mention when replacing the no-brace form `@name `; the space remains after the inserted mention.
+  - **FR-021**: System MUST treat `@name` as a placeholder only when followed by exactly one space OR end-of-line; otherwise (e.g., followed by punctuation or alphanumeric) it is NOT a placeholder.
+    -- **FR-022**: System MUST avoid replacing substrings inside email addresses or longer identifiers containing `@name` unless they match an accepted pattern boundary.
+- **FR-016**: System MUST accept mapping keys composed of any visible non-whitespace Unicode characters; brace-form keys exclude `}` and must be at least one character; no-brace form keys end at a space or end-of-line. Empty key is invalid.
+- **FR-017**: System MUST, when duplicate mapping keys occur, retain only the last occurrence (later definition overrides earlier silently; no warning emitted).
+- **FR-018**: System MUST treat mapping keys as case-sensitive (no normalization); authors must use exact casing in placeholders.
+- **FR-019**: System WILL NOT enforce an artificial maximum on mapping entries or placeholders per message; processing is O(n) in placeholder count and naturally bounded by Slack's message size limits.
+- **FR-023**: System MUST emit a 3-line human-readable summary in this exact order and format (UTF-8, newline terminated):
+  1. `Replaced: <comma-separated key=count entries sorted lexicographically by key>` OR `Replaced: none` if zero replacements.
+  2. `Unresolved: <space-separated literal tokens in encounter order>` OR `Unresolved: none` if none.
+  3. `Total: <integer>` where integer equals the sum of all replacement counts.
+     Example: `Replaced: alice=2,bob=1` / `Unresolved: @{unknown}` / `Total: 3`. No additional lines or prefixes are allowed. Whitespace is fixed: single space after each colon. Empty unresolved list uses `none`. Empty replaced list uses `none` and Total will be 0.
+- **FR-024**: System MUST treat `@{}` (empty name) as literal text with no replacement and exclude it from replacement and unresolved counts in the summary.
+- **FR-025**: System MUST skip placeholder detection and replacement inside fenced code blocks (```), inline code spans (`code`), and block quote lines (starting with ">"); tokens therein remain literal and are excluded from unresolved lists and counts.
+  - **FR-026**: System MUST load mention mappings from a single global root-level YAML mapping keyed exactly as `mentions` in `channels.yaml`, applied uniformly to all channels; per-channel overrides are out-of-scope for this feature.
 
 ### Key Entities _(include if feature involves data)_
 
@@ -128,18 +177,18 @@ _GATE: Automated checks run during main() execution_
 
 ### Content Quality
 
-- [ ] No implementation details (languages, frameworks, APIs)
-- [ ] Focused on user value and business needs
-- [ ] Written for non-technical stakeholders
-- [ ] All mandatory sections completed
+- [ ] No implementation details (languages, frameworks, APIs) <!-- Contains implementation artifacts: O(n), main(), resolution ordering -->
+- [ ] Focused on user value and business needs <!-- Mixed with technical phrasing -->
+- [ ] Written for non-technical stakeholders <!-- Developer-oriented terms present -->
+- [x] All mandatory sections completed <!-- Scenarios & Requirements present -->
 
 ### Requirement Completeness
 
-- [ ] No [NEEDS CLARIFICATION] markers remain
-- [ ] Requirements are testable and unambiguous
-- [ ] Success criteria are measurable
-- [ ] Scope is clearly bounded
-- [ ] Dependencies and assumptions identified
+- [x] No [NEEDS CLARIFICATION] markers remain
+- [ ] Requirements are testable and unambiguous <!-- All placeholder boundaries, summary format, and mapping key finalized -->
+- [ ] Success criteria are measurable <!-- Lacks quantitative success metrics -->
+- [ ] Scope is clearly bounded <!-- Mapping scope clarified: single global mapping; per-channel overrides out-of-scope -->
+- [ ] Dependencies and assumptions identified <!-- Assumptions about YAML structure, Slack ID validity not listed -->
 
 ---
 

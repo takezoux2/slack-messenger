@@ -42,6 +42,32 @@ try {
 
 // Delegate to compiled entrypoint with original args
 try {
+  const fs = require('fs')
+  const path = require('path')
+  const distMain = path.join(__dirname, '..', 'dist', 'main.js')
+  const srcMain = path.join(__dirname, '..', 'src', 'main.ts')
+
+  let needBuild = false
+  try {
+    const distStat = fs.statSync(distMain)
+    const srcStat = fs.statSync(srcMain)
+    if (srcStat.mtimeMs > distStat.mtimeMs) needBuild = true
+  } catch {
+    // dist not present yet
+    needBuild = true
+  }
+
+  if (needBuild) {
+    try {
+      // Build synchronously to ensure latest code runs
+      require('child_process').execSync('yarn build', {
+        stdio: 'ignore',
+      })
+    } catch (e) {
+      // Ignore build errors here; main.js may still exist or error will be thrown below
+    }
+  }
+
   require('../dist/main.js')
 } catch (err) {
   console.error(err && err.message ? err.message : String(err))

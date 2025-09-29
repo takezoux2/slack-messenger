@@ -89,7 +89,11 @@ export class CliService {
         .command('send-message')
         .description('Send a message to a Slack channel')
         .argument('<channel-id>', 'Slack channel ID (e.g., C1234567890)')
-        .argument('<message...>', 'Message content to send')
+        .argument(
+          '[message...]',
+          'Message content to send (omit if using --message-file)'
+        )
+        .option('-F, --message-file <path>', 'Load message content from file')
         .option('-v, --verbose', 'Enable verbose logging', false)
         .option(
           '-t, --token <token>',
@@ -104,10 +108,10 @@ export class CliService {
         .option('--retries <count>', 'Number of retry attempts', '3')
         .action((channelId, messageParts, options) => {
           executedCommand = 'send-message'
-          commandArgs = [
-            channelId,
-            Array.isArray(messageParts) ? messageParts.join(' ') : messageParts,
-          ]
+          const joined = Array.isArray(messageParts)
+            ? messageParts.join(' ')
+            : messageParts
+          commandArgs = [channelId, joined]
           commandOptions = options
         })
 
@@ -116,12 +120,16 @@ export class CliService {
         .command('broadcast')
         .description('Send a message to multiple Slack channels')
         .argument('<channel-list>', 'Named channel list from configuration')
-        .argument('<message...>', 'Message content to send')
+        .argument(
+          '[message...]',
+          'Message content to send (omit if using --message-file)'
+        )
         .option(
           '-c, --config <path>',
           'Path to YAML configuration file',
           './channels.yaml'
         )
+        .option('-F, --message-file <path>', 'Load message content from file')
         .option('-v, --verbose', 'Enable verbose logging', false)
         .option(
           '-t, --token <token>',
@@ -150,10 +158,10 @@ export class CliService {
         )
         .action((channelList, messageParts, options) => {
           executedCommand = 'broadcast'
-          commandArgs = [
-            channelList,
-            Array.isArray(messageParts) ? messageParts.join(' ') : messageParts,
-          ]
+          const joined = Array.isArray(messageParts)
+            ? messageParts.join(' ')
+            : messageParts
+          commandArgs = [channelList, joined]
           commandOptions = options
         })
 
@@ -198,7 +206,7 @@ export class CliService {
               "error: missing required argument 'channel-id' or 'channel-list'\n\nUse --help for usage information."
             )
           } else if (argName.includes('message')) {
-            throw new Error('Validation error: Message cannot be empty')
+            throw new Error('Missing required arguments: message')
           }
           throw new Error(
             `error: missing required argument '${argName}'\n\nUse --help for usage information.`
@@ -276,6 +284,9 @@ export class CliService {
         command: executedCommand || 'send-message',
         channelId: commandArgs[0],
         message: commandArgs[1],
+        // @ts-ignore: added dynamically; will map to CommandLineOptions later
+        messageFile: (commandOptions['messageFile'] ||
+          globalOptions['messageFile']) as string | undefined,
         verbose: (commandOptions['verbose'] || globalOptions['verbose']) as
           | boolean
           | undefined,
@@ -332,18 +343,13 @@ export class CliService {
       }
 
       // Special case: Check for missing message in send-message and broadcast commands
-      if (
-        (parsedArgs.command === 'send-message' ||
-          parsedArgs.command === 'broadcast') &&
-        !parsedArgs.message
-      ) {
-        throw new Error('Validation error: Message cannot be empty')
-      }
+      // For message-file feature, allow empty positional message if file is provided; defer validation to CommandLineOptions
 
       return CommandLineOptions.fromCliArgs({
         command: parsedArgs.command || undefined,
         channelId: parsedArgs.channelId || undefined,
         message: parsedArgs.message || undefined,
+        messageFile: (parsedArgs as any).messageFile || undefined,
         verbose: parsedArgs.verbose || undefined,
         help: parsedArgs.help || undefined,
         version: parsedArgs.version || undefined,
@@ -379,6 +385,26 @@ export class CliService {
    */
   getHelpText(): string {
     return this.program.helpInformation()
+  }
+
+  /**
+   * Get help text based on argv, showing subcommand help when applicable
+   */
+  getHelpTextFor(argv: string[]): string {
+    // Ensure commands are set up
+    const args = argv.slice(2)
+    const subcommands = ['send-message', 'broadcast', 'list-channels'] as const
+    const sub = args.find(a => subcommands.includes(a as any)) as
+      | (typeof subcommands)[number]
+      | undefined
+
+    if (sub) {
+      const cmd = this.program.commands.find(c => c.name() === sub)
+      if (cmd) {
+        return cmd.helpInformation()
+      }
+    }
+    return this.getHelpText()
   }
 
   /**
@@ -422,8 +448,12 @@ export class CliService {
       .command('send-message')
       .description('Send a message to a Slack channel')
       .argument('<channel-id>', 'Slack channel ID (e.g., C1234567890)')
-      .argument('<message...>', 'Message content to send')
+      .argument(
+        '[message...]',
+        'Message content to send (omit if using --message-file)'
+      )
       .option('-v, --verbose', 'Enable verbose logging', false)
+      .option('-F, --message-file <path>', 'Load message content from file')
       .option(
         '-t, --token <token>',
         'Slack bot token (overrides SLACK_BOT_TOKEN environment variable)'
@@ -444,12 +474,16 @@ export class CliService {
       .command('broadcast')
       .description('Send a message to multiple Slack channels')
       .argument('<channel-list>', 'Named channel list from configuration')
-      .argument('<message...>', 'Message content to send')
+      .argument(
+        '[message...]',
+        'Message content to send (omit if using --message-file)'
+      )
       .option(
         '-c, --config <path>',
         'Path to YAML configuration file',
         './channels.yaml'
       )
+      .option('-F, --message-file <path>', 'Load message content from file')
       .option('-v, --verbose', 'Enable verbose logging', false)
       .option(
         '-t, --token <token>',
@@ -580,6 +614,8 @@ export class CliService {
 Examples:
   Send Message:
     $ slack-messenger send-message C1234567890 "Hello, World!"
+    $ slack-messenger send-message C1234567890 -F ./message.txt
+    $ slack-messenger send-message C1234567890 --message-file ./message.md
     $ slack-messenger send-message C1234567890 "Hello" --verbose
     $ slack-messenger send-message C1234567890 "Hello" --timeout 5000
     $ slack-messenger send-message C1234567890 "Hello" --retries 1
@@ -587,6 +623,8 @@ Examples:
 
   Broadcast Message:
     $ slack-messenger broadcast all-teams "Deployment complete!"
+    $ slack-messenger broadcast all-teams -F ./message.txt
+    $ slack-messenger broadcast dev-channels --message-file ./msg.md --config ./my-config.yml
     $ slack-messenger broadcast dev-channels "New feature released" --config ./my-config.yml
     $ slack-messenger broadcast marketing "Campaign update" --dry-run
     $ slack-messenger broadcast all-teams "Important announcement" --max-concurrency 3

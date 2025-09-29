@@ -31,7 +31,7 @@ async function main(): Promise<void> {
 
     // Handle help and version requests first
     if (cliService.isHelpRequest(argv)) {
-      console.log(cliService.getHelpText())
+      console.log(cliService.getHelpTextFor(argv))
       console.log(CliService.getUsageExamples())
       process.exit(0)
     }
@@ -68,7 +68,7 @@ async function main(): Promise<void> {
 
     // Handle special cases
     if (options.help) {
-      console.log(cliService.getHelpText())
+      console.log(cliService.getHelpTextFor(argv))
       console.log(CliService.getUsageExamples())
       process.exit(0)
     }
@@ -111,7 +111,7 @@ async function main(): Promise<void> {
           process.exit(1)
         }
         if (error.includes('Missing required argument: message')) {
-          console.error('Validation error: Message cannot be empty')
+          console.error('Missing required arguments: message')
           process.exit(1)
         }
       }

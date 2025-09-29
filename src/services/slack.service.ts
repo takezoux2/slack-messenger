@@ -328,8 +328,13 @@ export class SlackService {
    * Resolve channel targets to full channel information
    */
   async resolveChannels(targets: ChannelTarget[]): Promise<ResolvedChannel[]> {
+    // Fast path: nothing to resolve
+    if (!targets || targets.length === 0) {
+      return []
+    }
     const resolved: ResolvedChannel[] = []
     const channelCache = new Map<string, ResolvedChannel>()
+    const seenIds = new Set<string>()
 
     // Get all channels for efficient lookup
     const allChannels = await this.getAllChannels()
@@ -356,8 +361,12 @@ export class SlackService {
         }
 
         if (channel) {
-          resolved.push(channel)
-          channelCache.set(channel.id, channel)
+          // Deduplicate by channel ID
+          if (!seenIds.has(channel.id)) {
+            resolved.push(channel)
+            channelCache.set(channel.id, channel)
+            seenIds.add(channel.id)
+          }
         }
       } catch (error) {
         // Log error but continue with other channels
@@ -389,7 +398,12 @@ export class SlackService {
 
         const response = await this.client.conversations.list(requestParams)
 
-        if (response.ok && response.channels) {
+        if (!response.ok) {
+          const reason = (response as any).error || 'unknown_error'
+          throw new Error(reason)
+        }
+
+        if (response.channels) {
           for (const channel of response.channels) {
             channels.push({
               id: channel.id!,

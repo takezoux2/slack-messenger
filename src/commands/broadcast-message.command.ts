@@ -15,6 +15,8 @@ import type { BroadcastResult } from '../models/broadcast-result'
 import type { ChannelConfiguration } from '../models/channel-configuration'
 import type { ResolvedChannel } from '../models/resolved-channel'
 import type { DryRunResult } from '../services/broadcast-dry-run.service'
+import { MessageInput } from '../models/message-input.js'
+import { FileMessageLoaderService } from '../services/file-message-loader.service.js'
 
 export interface BroadcastCommandConfig {
   slackService?: SlackService
@@ -148,6 +150,24 @@ export class BroadcastMessageCommand {
         `Authentication successful - Bot ID: ${authTest.botId}`
       )
 
+      // Determine message input (file or inline). For broadcast, options.message is required by validation today; extend to support messageFile when CLI adds it
+      let messageContent = options.message
+      // @ts-ignore - messageFile will be present on CommandLineOptions; BroadcastOptions doesn't include it
+      const messageFile: string | undefined = (options as any).messageFile
+      if (messageFile) {
+        const mi = await FileMessageLoaderService.load(messageFile)
+        this.logVerbose(
+          output,
+          `source: file (path: ${mi.filePath}) | preview: ${MessageInput.preview200(mi.content)}`
+        )
+        messageContent = mi.content
+      } else {
+        this.logVerbose(
+          output,
+          `source: inline (length: ${messageContent.length})`
+        )
+      }
+
       // Resolve channels
       this.logVerbose(output, 'Resolving channel identifiers...')
       let resolvedChannels: ResolvedChannel[]
@@ -175,7 +195,7 @@ export class BroadcastMessageCommand {
         this.logVerbose(output, 'Performing dry run simulation...')
         const dryRunResult = await this.dryRunService.simulateBroadcast(
           resolvedChannels,
-          options.message,
+          messageContent,
           options.listName
         )
 
@@ -203,7 +223,7 @@ export class BroadcastMessageCommand {
 
       const broadcastResult = await this.slackService.broadcastMessage(
         resolvedChannels,
-        options.message,
+        messageContent,
         { listName: options.listName }
       )
 

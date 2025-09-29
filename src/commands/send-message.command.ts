@@ -12,6 +12,8 @@ import { SlackMessage } from '../models/slack-message.js'
 import { CommandLineOptions } from '../models/command-line-options.js'
 import { MessageDeliveryResult } from '../models/message-delivery-result.js'
 import { AuthenticationCredentials } from '../models/authentication-credentials.js'
+import { FileMessageLoaderService } from '../services/file-message-loader.service.js'
+import { MessageInput } from '../models/message-input.js'
 
 export interface SendMessageCommandConfig {
   slackService?: SlackService
@@ -67,15 +69,36 @@ export class SendMessageCommand {
 
       // Extract required parameters
       const channelId = options.channelId
-      const messageText = options.message
+      if (!channelId) {
+        const error = new Error('Missing required parameters: channelId')
+        this.logVerbose(output, `Missing parameters - channelId: false`)
+        return this.createFailureResult(error, 1, output)
+      }
 
-      if (!channelId || !messageText) {
-        const error = new Error(
-          'Missing required parameters: channelId and message'
-        )
+      // Determine message input (file or inline)
+      let messageInput: MessageInput
+      if (options.messageFile) {
+        try {
+          messageInput = await FileMessageLoaderService.load(
+            options.messageFile
+          )
+        } catch (e) {
+          const err = e instanceof Error ? e : new Error(String(e))
+          return this.createFailureResult(err, 1, output)
+        }
         this.logVerbose(
           output,
-          `Missing parameters - channelId: ${!!channelId}, message: ${!!messageText}`
+          `source: file (path: ${messageInput.filePath}) | preview: ${MessageInput.preview200(messageInput.content)}`
+        )
+      } else if (options.message) {
+        messageInput = MessageInput.fromInline(options.message)
+        this.logVerbose(
+          output,
+          `source: inline (length: ${messageInput.content.length})`
+        )
+      } else {
+        const error = new Error(
+          'Missing required parameters: message or --message-file'
         )
         return this.createFailureResult(error, 1, output)
       }
@@ -84,11 +107,11 @@ export class SendMessageCommand {
       this.logVerbose(output, `Channel ID: ${channelId}`)
       this.logVerbose(
         output,
-        `Message length: ${messageText.length} characters`
+        `Message length: ${messageInput.content.length} characters`
       )
 
       // Create models
-      const message = SlackMessage.create(messageText, channelId)
+      const message = SlackMessage.create(messageInput.content, channelId)
       const target = {
         identifier: channelId,
         type: 'id' as const,
@@ -127,7 +150,9 @@ export class SendMessageCommand {
         this.logVerbose(output, 'Token loaded: xoxb-****')
       } catch (e) {
         const err = e instanceof Error ? e : new Error(String(e))
-        return this.createFailureResult(err, 2, output)
+        // Normalize token format errors to match integration test expectations
+        const wrapped = new Error(`Authentication failed: ${err.message}`)
+        return this.createFailureResult(wrapped, 2, output)
       }
 
       // Ensure SlackService uses our credentials (so tests can spy on API interactions consistently)

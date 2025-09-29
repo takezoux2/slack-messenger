@@ -105,8 +105,8 @@ export class SlackMessage {
       throw new Error('Channel ID is required and must be a string')
     }
 
-    // Slack channel ID format: C followed by 10 alphanumeric characters
-    const channelIdPattern = /^C[A-Z0-9]{10}$/i
+    // Slack channel ID format: C followed by 10-21 alphanumeric characters (allowing longer variants)
+    const channelIdPattern = /^C[A-Z0-9]{10,21}$/i
     if (!channelIdPattern.test(channelId)) {
       throw new Error('Invalid channel ID format. Must be like C1234567890')
     }

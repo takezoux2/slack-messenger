@@ -5,11 +5,11 @@ Feature: 004-load-message-from
 
 ## Decisions and Rationale
 
-### 1) UTF-8 validation and decoding
+### 1) UTF-8 handling (no validation)
 
-- Decision: Use WHATWG TextDecoder with `{ fatal: true }` to reject non-UTF-8 inputs when decoding a Buffer.
-- Rationale: Ensures strict UTF-8 requirement (FR-007) and produces clear errors on invalid byte sequences.
-- Alternatives: `fs.readFile('utf8')` (silently replaces invalid sequences); iconv-lite (adds dependency, unnecessary).
+- Decision: Do not perform explicit UTF-8 validation. Read files as UTF-8 text using Node's default decoding (e.g., `fs.readFile` with `utf8`). If invalid sequences exist, they may be replaced with the Unicode replacement character by the runtime; the command must proceed to apply other validations.
+- Rationale: Aligns with the updated spec: “assume UTF-8; no validation.” Avoids failing on minor encoding glitches and keeps behavior consistent across platforms.
+- Alternatives (rejected for this feature): Using `TextDecoder` with `{ fatal: true }` to enforce strict validation.
 
 ### 2) CLI option design
 
@@ -25,9 +25,9 @@ Feature: 004-load-message-from
 
 ### 4) Message length enforcement
 
-- Decision: Enforce 2,000-character limit after trimming. Reject when `content.length > 2000` with validation error (FR-006).
-- Rationale: Clear, deterministic behavior before any API call.
-- Alternatives: Allow longer and let Slack reject; violates FR-006.
+- Decision: Enforce 2,000-character limit after trailing-trim, but only for file-based input. Inline message arguments retain the existing 40,000-character limit used today.
+- Rationale: Prevent regressions for existing users while applying a safer default for file-based content.
+- Alternatives: Apply 2,000 to all inputs (would be a breaking change) or remove the limit (risks API failures and inconsistent UX).
 
 ### 5) Verbose and dry-run output
 

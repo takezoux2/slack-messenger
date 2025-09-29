@@ -72,7 +72,7 @@ As a user running the messaging CLI, I want to provide a path to a markdown file
 5. Given I run the command in verbose or dry-run/preview mode, When I provide a file path, Then the output indicates that content was loaded from the specified file path and shows a preview of the first 200 characters of the content without leaking sensitive data.
 6. Given the provided file path points to an empty (or whitespace-only) file, When I run the command, Then the system blocks with a clear error and no message is sent.
 7. Given the provided file content exceeds the allowable message length, When I run the command, Then the system blocks with a clear error shown in the console and no message is sent.
-8. Given the provided file is not UTF-8 encoded, When I run the command, Then the system blocks with a clear error and no message is sent.
+8. Character encoding is not validated. Given any file encoding, When I run the command, Then the system treats the file as UTF-8 text and does not fail due to encoding.
 9. Given the provided file ends with trailing newline(s) or whitespace, When I run the command, Then the system trims trailing whitespace and newline(s) before sending the message.
 10. Given the provided file contains Markdown formatting (e.g., headings, bold, lists), When I run the command to send or broadcast, Then the message is treated as Markdown and renders accordingly in the destination.
 
@@ -80,7 +80,7 @@ As a user running the messaging CLI, I want to provide a path to a markdown file
 
 - File path points to an empty file: The system must block with a clear error; no message is sent.
 - File size exceeds allowable message length: The system must block with a clear error shown in the console; no message is sent.
-- Character encoding: Files must be UTF-8 encoded; non-UTF-8 encodings must result in a clear error and no message is sent.
+- Character encoding: Always assumed UTF-8. The system does not validate encoding; non-UTF-8 bytes may appear as replacement characters but will not cause an encoding-specific error.
 - Trailing newline or whitespace at end of file: The system must trim trailing whitespace and final newline(s) before sending.
 - Markdown formatting semantics: Messages are treated as Markdown and rendered accordingly by the destination; formatting should be preserved.
 - File path safety and access: How should permission errors or locked files be reported to the user? Define standard error language and exit behavior.
@@ -96,7 +96,7 @@ As a user running the messaging CLI, I want to provide a path to a markdown file
 - FR-004: If both a file path and a direct message are provided, the system MUST block with a clear error and MUST NOT send a message.
 - FR-005: If the specified file cannot be found or read, the system MUST present a clear error and MUST NOT send a message.
 - FR-006: The system MUST enforce a maximum message length of 2,000 characters; if the content exceeds this limit, the system MUST block with a clear error shown in the console and MUST NOT send a message.
-- FR-007: The system MUST require UTF-8 encoded files for message content; if the file is not UTF-8, the system MUST block with a clear error and MUST NOT send a message.
+- FR-007: The system MUST assume UTF-8 for file content and MUST NOT perform character encoding validation.
 - FR-008: The system MUST preserve all existing modes (verbose and dry-run/preview) and reflect the chosen input source in user-facing output when those modes are enabled.
 - FR-009: The system MUST provide consistent behavior across the single-send and broadcast commands.
 - FR-010: The system SHOULD provide helpful guidance in errors (e.g., suggesting checking the path, permissions, or using direct message input as an alternative).

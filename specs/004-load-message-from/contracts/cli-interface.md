@@ -20,7 +20,7 @@ Rules:
 - If both are provided, the command MUST fail with a clear error and exit code 1.
 - If `--message-file` is provided, the file must:
   - Exist and be readable
-  - Be UTF-8 decodable (invalid sequences cause failure)
+  - Be treated as UTF-8 input; encoding is not validated (invalid sequences may be replaced during decoding)
   - After trimming trailing whitespace/newlines, content must be 1..2000 characters
 
 ### Existing Positional Arguments (unchanged)

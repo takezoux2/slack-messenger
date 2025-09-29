@@ -20,32 +20,35 @@ import type { ChannelTarget } from '../../src/models/channel-target'
 import type { ResolvedChannel } from '../../src/models/resolved-channel'
 
 // Mock the Slack WebClient
+// Ensure a single shared mock client instance so spies are consistent
+const sharedMockClient = {
+  conversations: {
+    list: vi.fn().mockResolvedValue({
+      ok: true,
+      channels: [],
+    }),
+    info: vi.fn().mockResolvedValue({
+      ok: true,
+      channel: { id: 'C1234567890', name: 'test-channel' },
+    }),
+  },
+  auth: {
+    test: vi.fn().mockResolvedValue({
+      ok: true,
+      user_id: 'U123456',
+      team_id: 'T123456',
+    }),
+  },
+  chat: {
+    postMessage: vi.fn().mockResolvedValue({
+      ok: true,
+      ts: '1234567890.123456',
+    }),
+  },
+}
+
 vi.mock('@slack/web-api', () => ({
-  WebClient: vi.fn().mockImplementation(() => ({
-    conversations: {
-      list: vi.fn().mockResolvedValue({
-        ok: true,
-        channels: [],
-      }),
-      info: vi.fn().mockResolvedValue({
-        ok: true,
-        channel: { id: 'C1234567890', name: 'test-channel' },
-      }),
-    },
-    auth: {
-      test: vi.fn().mockResolvedValue({
-        ok: true,
-        user_id: 'U123456',
-        team_id: 'T123456',
-      }),
-    },
-    chat: {
-      postMessage: vi.fn().mockResolvedValue({
-        ok: true,
-        ts: '1234567890.123456',
-      }),
-    },
-  })),
+  WebClient: vi.fn().mockImplementation(() => sharedMockClient),
   LogLevel: {
     INFO: 'info',
     DEBUG: 'debug',
@@ -66,8 +69,7 @@ describe('Channel Resolution', () => {
     slackService = new SlackService({ credentials })
 
     // Get reference to mocked WebClient
-    const { WebClient } = require('@slack/web-api')
-    mockWebClient = new WebClient()
+    mockWebClient = sharedMockClient
   })
 
   describe('resolveChannels', () => {

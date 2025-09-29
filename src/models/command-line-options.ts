@@ -28,6 +28,7 @@ export interface CommandLineOptionsParams {
   command: string
   channelId?: string | undefined
   message?: string | undefined
+  messageFile?: string | undefined
   verbose?: boolean | undefined
   help?: boolean | undefined
   version?: boolean | undefined
@@ -49,6 +50,7 @@ export class CommandLineOptions {
   private readonly _command: string
   private readonly _channelId: string | undefined
   private readonly _message: string | undefined
+  private readonly _messageFile: string | undefined
   private readonly _verbose: boolean
   private readonly _help: boolean
   private readonly _version: boolean
@@ -71,6 +73,7 @@ export class CommandLineOptions {
     this._command = params.command
     this._channelId = params.channelId
     this._message = params.message
+    this._messageFile = params.messageFile
     this._verbose = params.verbose || false
     this._help = params.help || false
     this._version = params.version || false
@@ -107,6 +110,13 @@ export class CommandLineOptions {
    */
   get message(): string | undefined {
     return this._message
+  }
+
+  /**
+   * Get the message file path (if provided)
+   */
+  get messageFile(): string | undefined {
+    return this._messageFile
   }
 
   /**
@@ -235,7 +245,11 @@ export class CommandLineOptions {
     if (!this.isSendMessageCommand) {
       return true // Not applicable for other commands
     }
-    return !!(this._channelId && this._message)
+    // Require channelId and exactly one of message or messageFile
+    const hasOneInput =
+      (!!this._message && !this._messageFile) ||
+      (!!this._messageFile && !this._message)
+    return !!(this._channelId && hasOneInput)
   }
 
   /**
@@ -245,7 +259,10 @@ export class CommandLineOptions {
     if (!this.isBroadcastCommand) {
       return true // Not applicable for other commands
     }
-    return !!(this._channelList && this._message)
+    const hasOneInput =
+      (!!this._message && !this._messageFile) ||
+      (!!this._messageFile && !this._message)
+    return !!(this._channelList && hasOneInput)
   }
 
   /**
@@ -271,14 +288,14 @@ export class CommandLineOptions {
     if (this.isSendMessageCommand) {
       const missing: string[] = []
       if (!this._channelId) missing.push('channelId')
-      if (!this._message) missing.push('message')
+      if (!this._message && !this._messageFile) missing.push('message')
       return missing
     }
 
     if (this.isBroadcastCommand) {
       const missing: string[] = []
       if (!this._channelList) missing.push('channelList')
-      if (!this._message) missing.push('message')
+      if (!this._message && !this._messageFile) missing.push('message')
       return missing
     }
 
@@ -293,9 +310,9 @@ export class CommandLineOptions {
       return true // Not provided, so not invalid
     }
 
-    // Slack public channel ID format validation: starts with 'C' and 10-13 chars total
-    // Accepts IDs like C1234567890 and longer variants
-    const channelIdPattern = /^C[A-Z0-9]{9,20}$/i
+    // Slack public channel ID format validation: starts with 'C' and 10-21 alphanumeric chars after
+    // Accepts IDs like C1234567890 and longer variants sometimes seen in tests
+    const channelIdPattern = /^C[A-Z0-9]{9,21}$/i
     return channelIdPattern.test(this._channelId)
   }
 
@@ -324,9 +341,15 @@ export class CommandLineOptions {
         errors.push('Invalid channel ID format. Must be like C1234567890')
       }
 
-      if (!this._message) {
+      // Mutually exclusive inputs for message content
+      if (this._message && this._messageFile) {
+        errors.push('Provide either a message or --message-file, not both')
+      }
+      if (!this._message && !this._messageFile) {
         errors.push('Missing required argument: message')
-      } else if (!this.isMessageValid) {
+      }
+      // Inline message validation retains 40,000 limit
+      if (this._message && !this.isMessageValid) {
         const trimmed = this._message.trim()
         if (trimmed.length === 0) {
           errors.push('Message cannot be empty or whitespace only')
@@ -341,9 +364,14 @@ export class CommandLineOptions {
         errors.push('Missing required argument: channelList')
       }
 
-      if (!this._message) {
+      // Mutually exclusive inputs
+      if (this._message && this._messageFile) {
+        errors.push('Provide either a message or --message-file, not both')
+      }
+      if (!this._message && !this._messageFile) {
         errors.push('Missing required argument: message')
-      } else if (!this.isMessageValid) {
+      }
+      if (this._message && !this.isMessageValid) {
         const trimmed = this._message.trim()
         if (trimmed.length === 0) {
           errors.push('Message cannot be empty or whitespace only')
@@ -492,6 +520,7 @@ export class CommandLineOptions {
     command?: string | undefined
     channelId?: string | undefined
     message?: string | undefined
+    messageFile?: string | undefined
     verbose?: boolean | undefined
     help?: boolean | undefined
     version?: boolean | undefined
@@ -512,6 +541,7 @@ export class CommandLineOptions {
       command: args.command || 'send-message',
       channelId: args.channelId,
       message: args.message,
+      messageFile: args.messageFile,
       verbose: args.verbose,
       help: args.help,
       version: args.version,

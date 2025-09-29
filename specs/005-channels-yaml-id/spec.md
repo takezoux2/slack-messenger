@@ -156,8 +156,8 @@ As a person composing a broadcast or direct message using the existing messaging
 - **FR-019**: System WILL NOT enforce an artificial maximum on mapping entries or placeholders per message; processing is O(n) in placeholder count and naturally bounded by Slack's message size limits.
 - **FR-023 (Revised)**: System MUST emit a deterministic human-readable summary after each send (including dry-run) using one of these formats (UTF-8, each line newline terminated):
   - If at least one placeholder form (replaced or unresolved) was detected:
-    1. `Replacements: key1=count1, key2=count2 (total=X)` OR `Replacements: none (total=0)` when zero replacements (keys sorted lexicographically, no spaces after commas).
-    2. `Unresolved: token1 token2` listing unresolved literal tokens (in first-appearance order, separated by single spaces) OR `Unresolved: none` if none.
+    1. `Replacements: key1=count1, key2=count2 (total=X)` OR `Replacements: (total=0)` when zero replacements (keys sorted lexicographically, commas + space).
+    2. `Unresolved: token1, token2` listing unresolved literal tokens (in first-appearance order, rendered as the original literal substrings, comma+space separated) OR `Unresolved: none` if none.
   - If no placeholders were detected at all (neither replaced nor unresolved): a single line `Placeholders: none`.
     Constraints:
   - Deterministic ordering: replacements sorted by key; unresolved in encounter order.
@@ -165,6 +165,9 @@ As a person composing a broadcast or direct message using the existing messaging
   - No extra trailing spaces; each output line ends with a newline; no blank lines between lines.
   - Parenthetical `(total=X)` count MUST equal sum of all replacement counts.
     Rationale: Aligns with CLI contract & tasks; eliminates redundant third line while preserving total via parenthetical. (Supersedes prior 3-line format.)
+
+Cross-reference: See implementation task tracking in `tasks.md` (T004–T037) for verification gates related to FR-023/FR-028 (summary formatting & team type handling).
+
 - **FR-024**: System MUST treat `@{}` (empty name) as literal text with no replacement and exclude it from replacement and unresolved counts in the summary.
 - **FR-025**: System MUST skip placeholder detection and replacement inside fenced code blocks (```), inline code spans (`code`), and block quote lines (starting with ">"); tokens therein remain literal and are excluded from unresolved lists and counts.
   - **FR-026**: System MUST load mention mappings from a single global root-level YAML mapping keyed exactly as `mentions` in `channels.yaml`, applied uniformly to all channels; per-channel overrides are out-of-scope for this feature.

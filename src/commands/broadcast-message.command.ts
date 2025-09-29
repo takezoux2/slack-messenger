@@ -21,6 +21,7 @@ import {
   formatResolutionSummary,
 } from '../services/mention-resolution.service.js'
 import { FileMessageLoaderService } from '../services/file-message-loader.service.js'
+import { LoggingService } from '../services/logging.service.js'
 
 export interface BroadcastCommandConfig {
   slackService?: SlackService
@@ -47,6 +48,7 @@ export class BroadcastMessageCommand {
   private readonly dryRunService: BroadcastDryRunService
   private readonly errorHandler: ErrorHandlerService
   private readonly verboseLogging: boolean
+  private readonly logging = LoggingService.getInstance()
 
   constructor(config?: BroadcastCommandConfig) {
     this.verboseLogging = config?.verboseLogging || false
@@ -238,6 +240,13 @@ export class BroadcastMessageCommand {
           )
           messageContent = resolution.text
           mentionSummaryLines = formatResolutionSummary(resolution.summary)
+          if (resolution.summary.hadPlaceholders) {
+            this.logging.debug('mention-resolution summary', {
+              replacements: resolution.summary.replacements,
+              total: resolution.summary.totalReplacements,
+              unresolved: resolution.summary.unresolved,
+            })
+          }
         } catch (e) {
           // Non-fatal: leave messageContent unchanged on failure
           this.logVerbose(

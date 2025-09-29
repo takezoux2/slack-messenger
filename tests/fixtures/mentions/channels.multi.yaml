@@ -1,0 +1,12 @@
+mentions:
+  alice:
+    id: U111AAA
+  team-lead:
+    id: S222TEAM
+    type: team
+
+channel_lists:
+  - name: multi
+    channels:
+      - C1234567890
+      - C1234567891

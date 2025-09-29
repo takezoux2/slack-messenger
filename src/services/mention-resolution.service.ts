@@ -191,10 +191,15 @@ export function applyMentions(
     if (name === 'here') {
       replacedStr = formatReplacement(name, '', 'here')
     } else {
-      const entry = mapping[name]
-      if (entry && entry.id) {
-        const t = entry.type === 'team' ? 'team' : 'user'
-        replacedStr = formatReplacement(name, entry.id, t)
+      const entry = (mapping as any)[name]
+      if (entry) {
+        // Support plain string shorthand entry => user id
+        if (typeof entry === 'string') {
+          replacedStr = formatReplacement(name, entry, 'user')
+        } else if (entry.id) {
+          const t = entry.type === 'team' ? 'team' : 'user'
+          replacedStr = formatReplacement(name, entry.id, t)
+        }
       }
     }
 

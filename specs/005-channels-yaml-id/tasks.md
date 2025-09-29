@@ -59,20 +59,20 @@ Models first, then parsing/resolution service, then configuration & pipeline int
 ## Phase 3.4: Integration & Validation Enhancements
 
 26. [x] T026 Add validation in `config-validation.service.ts` for `mentions:` map entry object shape (id required, optional type) with unit test `tests/unit/mentions-config-validation.test.ts`.
-27. T027 Add additional integration test with multiple channels present validating the single global mapping usage in `tests/integration/mention-multi-channel.test.ts` (ensures uniform resolution across channels including team & here tokens if present).
-28. T028 Add integration test ensuring unmapped placeholders remain literal and reported summary in `tests/integration/mention-unmapped.test.ts`.
-29. T029 Refactor mention-resolution service for purity & export internal helper for test clarity (if complexity > ~150 LOC) – keep public API stable.
-30. T030 Add logging (debug level) around resolution counts in `src/services/logging.service.ts` (only when placeholders found) without changing summary output.
+27. [x] T027 Add additional integration test with multiple channels present validating the single global mapping usage in `tests/integration/mention-multi-channel.test.ts` (ensures uniform resolution across channels including team & here tokens if present).
+28. [x] T028 Add integration test ensuring unmapped placeholders remain literal and reported summary in `tests/integration/mention-unmapped.test.ts`.
+29. [x] T029 Refactor mention-resolution service for purity & export internal helper for test clarity (if complexity > ~150 LOC) – keep public API stable. (No major refactor required; code size acceptable.)
+30. [x] T030 Add logging (debug level) around resolution counts in `src/services/logging.service.ts` (only when placeholders found) without changing summary output.
 
 ## Phase 3.5: Polish & Documentation
 
-31. T031 [P] Add exhaustive unit tests for edge parsing (consecutive placeholders, start/end of file, large counts) in `tests/unit/mention-tokenizer-exhaustive.test.ts`.
-32. T032 [P] Add performance benchmark test (Vitest approximate timing) in `tests/unit/mention-performance.test.ts` (generate message with 500 placeholders, assert runtime < 5ms average or mark as informational without hard fail if environment variance).
-33. T033 Update `README.md` & `quickstart.md` with final syntax (entry object, team, here), summary examples, and note about skipped regions (remove WIP label). Include config example.
-34. T034 Update `specs/005-channels-yaml-id/spec.md` reference section if needed and ensure tasks.md cross-links added (reflect FR-028).
-35. T035 Run full test suite + lint; fix any remaining style issues; finalize feature branch for PR.
-36. T036 Prepare CHANGELOG entry (if project uses one; else append to README change log section) summarizing feature.
-37. T037 Remove any leftover TODO comments related to mention feature and ensure code comments concise.
+31. [x] T031 [P] Add exhaustive unit tests for edge parsing (consecutive placeholders, start/end of file, large counts) in `tests/unit/mention-tokenizer-exhaustive.test.ts`.
+32. [x] T032 [P] Add performance benchmark test (Vitest approximate timing) in `tests/unit/mention-performance.test.ts` (generate message with 500 placeholders, assert runtime < 5ms average or mark as informational without hard fail if environment variance).
+33. [x] T033 Update `README.md` & `quickstart.md` with final syntax (entry object, team, here), summary examples, and note about skipped regions (remove WIP label). Include config example.
+34. [x] T034 Update `specs/005-channels-yaml-id/spec.md` reference section if needed and ensure tasks.md cross-links added (reflect FR-028).
+35. [ ] T035 Run full test suite + lint; fix any remaining style issues; finalize feature branch for PR.
+36. [x] T036 Prepare CHANGELOG entry (if project uses one; else append to README change log section) summarizing feature.
+37. [x] T037 Remove any leftover TODO comments related to mention feature and ensure code comments concise.
 
 ## Dependencies Summary
 

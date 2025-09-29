@@ -1,59 +1,72 @@
 # Quickstart: Mention Placeholder Resolution
 
-## 1. Add mention mappings to channels.yaml
+## 1. Define global mentions mapping (channels.yaml)
 
 ```yaml
-channels:
-  - id: C123456
-    mentions:
-      alice: U111AAA
-      team-lead: U222BBB
+mentions:
+  alice:
+    id: U111AAA
+  team-lead:
+    id: S222TEAM
+    type: team
+
+channel_lists:
+  - name: basic
+    channels:
+      - C1234567890
 ```
 
-## 2. Write a message file (message.md)
+## 2. Create message file (message.md)
 
-```
+```markdown
 Deployment complete @{alice}.
 Thanks @team-lead for coordination.
 ```
 
-## 3. Run broadcast (example)
+## 3. Dry-run broadcast
 
-```
-node dist/main.js broadcast --file message.md --config channels.yaml
+```powershell
+yarn start broadcast basic -F message.md --dry-run
 ```
 
-## 4. Expected stdout summary
+Output summary:
 
 ```
 Replacements: alice=1, team-lead=1 (total=2)
 Unresolved: none
 ```
 
-## 5. Edge case example
+## 4. Edge cases (skipped regions & boundaries)
 
-Message:
+```markdown
+`@team-lead` inline code
 
-```
-`@alice` -> inline code
-> @{team-lead} -> block quote
-@team-lead, punctuation after (no replacement)
-@team-lead end-of-line should replace
+> @{team-lead} block quote
 ```
 
-Summary (assuming mapping for team-lead only):
+@{team-lead} code fence skipped
+
+```
+@team-lead, (punctuation -> not replaced)
+@team-lead end-of-line replaced
+```
+
+Result (only one replacement):
 
 ```
 Replacements: team-lead=1 (total=1)
 Unresolved: none
 ```
 
-(Inline code, block quote, and punctuation case skipped.)
+## 5. Built-in token
 
-## 6. Dry Run
+`@here` / `@{here}` は常に `<!here>` に変換され、`here` としてカウントされます。
 
-If CLI supports dry-run flag (`--dry-run`), summary still produced; message not sent.
+## 6. Failure / fallback
 
-## 7. Failure Handling
+- `mentions` が無くても既存動作は維持。
+- 未定義プレースホルダはリテラルのまま `Unresolved:` に表示。
 
-If `mentions` section absent, feature is inert; summary may show `Placeholders: none` (if no tokens) or unresolved tokens if present.
+## 7. No placeholders
+
+プレースホルダが一切無い場合: `Placeholders: none`

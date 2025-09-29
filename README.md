@@ -210,9 +210,80 @@ yarn start broadcast test "Deploy" --dry-run
 yarn start list-channels --format json
 ```
 
-## 今後の改善予定
+## メンションプレースホルダ解決機能
 
-- メンションプレースホルダ解決 (`@{name}` / `@name`) - WIP
+`channels.yaml` のルートに `mentions:` マッピングを定義すると、メッセージ本文中のプレースホルダを Slack メンション形式に変換します。
+
+対応パターン:
+
+- `@{name}` ブレース形式 (任意の可視文字)
+- `@name` ブレースなし形式 (直後がスペース or 行末のみ有効 / 句読点直後は無効)
+
+変換ルール:
+
+| type | 例 ID    | 出力例                |
+| ---- | -------- | --------------------- |
+| user | U123ABC  | `<@U123ABC>`          |
+| team | S456TEAM | `<!subteam^S456TEAM>` |
+| here | (組込)   | `<!here>`             |
+
+設定例:
+
+```yaml
+mentions:
+  alice:
+    id: U111AAA
+  team-lead:
+    id: S222TEAM
+    type: team
+channel_lists:
+  - name: basic
+    channels:
+      - C1234567890
+```
+
+メッセージ例 (`message.md`):
+
+```
+Deploy 完了 @{alice}
+Thanks @team-lead for support
+```
+
+Dry-run 実行例:
+
+```powershell
+yarn start broadcast basic -F message.md --dry-run
+```
+
+出力サマリ例:
+
+```
+Replacements: alice=1, team-lead=1 (total=2)
+Unresolved: none
+```
+
+未解決トークンがある場合:
+
+```
+Replacements: alice=1 (total=1)
+Unresolved: @{ghost}, @unknown
+```
+
+プレースホルダが 1 つも検出されなかった場合:
+
+```
+Placeholders: none
+```
+
+除外領域 (変換されない):
+
+- インラインコード `` `...` ``
+- フェンスコードブロック ` `
+- ブロック引用行 (`>` で開始)
+
+境界ルール (ブレースなし): `@name` の直後がスペース/行末のみ有効。`@name,` や `@name.` は変換されません。組込 `@here` / `@{here}` も常に変換されます。
+
+## 今後の改善予定
 
 - エグジットコードの粒度細分化
 - Slack レート制限時のより高度なバックオフ
@@ -222,3 +293,7 @@ yarn start list-channels --format json
 ---
 
 ご意見・改善提案歓迎です。Issue / PR お待ちしています。
+
+## 変更履歴 (一部抜粋)
+
+- 2025-09-30: グローバル `mentions` 設定とメンションプレースホルダ解決機能を追加 (`@{name}` / `@name` / `@here`).

@@ -18,13 +18,20 @@ node dist/main.js broadcast --file path/to/message.md --config channels.yaml
 
 ## Configuration Example (YAML)
 
+Global root-level `mentions` mapping (applies to all channels/messages) plus existing channel list. Each entry is an object with `id` and optional `type` (default `user`). Built-in `@here` / `@{here}` do not require an entry.
+
 ```yaml
+mentions:
+  alice:
+    id: U111AAA
+  team-lead:
+    id: S444TEAM
+    type: team
+  qa-owner:
+    id: U333CCC
+
 channels:
   - id: C123456
-    mentions:
-      alice: U111AAA
-      team-lead: U222BBB
-      QA: U333CCC
 ```
 
 ## Message Example (input)
@@ -43,14 +50,15 @@ Code fence:
 
 ## Replacement Rules Summary
 
-- `@{name}` → replace if `name` in mapping.
-- `@name` (no braces) → replace only if followed by single space OR end-of-line.
+- `@{name}` → replace if `name` exists in the root-level mapping OR is built-in `here`.
+- `@name` (no braces) → replace only if followed by single space OR end-of-line and `name` exists (or is `here`).
+- `type: user` → `<@ID>` replacement; `type: team` → `<!subteam^ID>` replacement; built-in `here` → `<!here>`.
 - Skip inside fenced code blocks, inline code, block quotes.
 - Unmapped tokens left literal.
 
 ## Output
 
-1. Sent message (internal) with `<@UserID>` inserted.
+1. Sent message (internal) with formatted mention tokens inserted (e.g., `<@U123>`, `<!subteam^S456>`, `<!here>`).
 2. Summary lines to stdout:
 
 ```
@@ -91,9 +99,9 @@ Unresolved: none
 
 ```json
 {
-  "replacements": { "alice": 2, "team-lead": 1 },
+  "replacements": { "alice": 2, "team-lead": 1, "here": 1 },
   "unresolved": ["@{unknown}"],
-  "totalReplacements": 3,
+  "totalReplacements": 4,
   "hadPlaceholders": true
 }
 ```

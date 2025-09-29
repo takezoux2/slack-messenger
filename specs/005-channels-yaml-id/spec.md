@@ -132,7 +132,7 @@ As a person composing a broadcast or direct message using the existing messaging
 
 ### Functional Requirements
 
-- **FR-001**: System MUST allow defining a set of name → user identifier mappings within the existing channel configuration file (referred to as "mention mapping").
+- **FR-001**: System MUST allow defining a set of mention entries within the global root-level `mentions` mapping. Each entry is keyed by placeholder name and MUST include an `id` field (Slack identifier) and MAY include a `type` field. If `type` is omitted it defaults to `user`.
   -- **FR-002**: System MUST recognize placeholder tokens in message text formatted either as `@{name}` OR as `@name ` (no braces, single trailing space) where `name` corresponds exactly to a configured mapping key.
 - **FR-003**: System MUST replace each recognized placeholder token with a valid user mention for the mapped user identifier prior to sending the message.
 - **FR-004**: System MUST leave any placeholder token unchanged if no mapping for its `name` exists.
@@ -150,23 +150,32 @@ As a person composing a broadcast or direct message using the existing messaging
   -- **FR-020**: System MUST preserve exactly one space after the mention when replacing the no-brace form `@name `; the space remains after the inserted mention.
   - **FR-021**: System MUST treat `@name` as a placeholder only when followed by exactly one space OR end-of-line; otherwise (e.g., followed by punctuation or alphanumeric) it is NOT a placeholder.
     -- **FR-022**: System MUST avoid replacing substrings inside email addresses or longer identifiers containing `@name` unless they match an accepted pattern boundary.
-- **FR-016**: System MUST accept mapping keys composed of any visible non-whitespace Unicode characters; brace-form keys exclude `}` and must be at least one character; no-brace form keys end at a space or end-of-line. Empty key is invalid.
+- **FR-016**: System MUST accept mapping keys composed of any visible non-whitespace Unicode characters; brace-form keys exclude `}` and must be at least one character; no-brace form keys end at a space or end-of-line. Empty key is invalid. Each mapping value MUST be an object of shape: `{ id: string; type?: "user" | "team" }`. Additional fields MUST be ignored (forward compatibility). Plain string values are NOT supported in this feature (would be a future backward-compat enhancement).
 - **FR-017**: System MUST, when duplicate mapping keys occur, retain only the last occurrence (later definition overrides earlier silently; no warning emitted).
 - **FR-018**: System MUST treat mapping keys as case-sensitive (no normalization); authors must use exact casing in placeholders.
 - **FR-019**: System WILL NOT enforce an artificial maximum on mapping entries or placeholders per message; processing is O(n) in placeholder count and naturally bounded by Slack's message size limits.
-- **FR-023**: System MUST emit a 3-line human-readable summary in this exact order and format (UTF-8, newline terminated):
-  1. `Replaced: <comma-separated key=count entries sorted lexicographically by key>` OR `Replaced: none` if zero replacements.
-  2. `Unresolved: <space-separated literal tokens in encounter order>` OR `Unresolved: none` if none.
-  3. `Total: <integer>` where integer equals the sum of all replacement counts.
-     Example: `Replaced: alice=2,bob=1` / `Unresolved: @{unknown}` / `Total: 3`. No additional lines or prefixes are allowed. Whitespace is fixed: single space after each colon. Empty unresolved list uses `none`. Empty replaced list uses `none` and Total will be 0.
+- **FR-023 (Revised)**: System MUST emit a deterministic human-readable summary after each send (including dry-run) using one of these formats (UTF-8, each line newline terminated):
+  - If at least one placeholder form (replaced or unresolved) was detected:
+    1. `Replacements: key1=count1, key2=count2 (total=X)` OR `Replacements: none (total=0)` when zero replacements (keys sorted lexicographically, no spaces after commas).
+    2. `Unresolved: token1 token2` listing unresolved literal tokens (in first-appearance order, separated by single spaces) OR `Unresolved: none` if none.
+  - If no placeholders were detected at all (neither replaced nor unresolved): a single line `Placeholders: none`.
+    Constraints:
+  - Deterministic ordering: replacements sorted by key; unresolved in encounter order.
+  - Exactly one space after each colon.
+  - No extra trailing spaces; each output line ends with a newline; no blank lines between lines.
+  - Parenthetical `(total=X)` count MUST equal sum of all replacement counts.
+    Rationale: Aligns with CLI contract & tasks; eliminates redundant third line while preserving total via parenthetical. (Supersedes prior 3-line format.)
 - **FR-024**: System MUST treat `@{}` (empty name) as literal text with no replacement and exclude it from replacement and unresolved counts in the summary.
 - **FR-025**: System MUST skip placeholder detection and replacement inside fenced code blocks (```), inline code spans (`code`), and block quote lines (starting with ">"); tokens therein remain literal and are excluded from unresolved lists and counts.
   - **FR-026**: System MUST load mention mappings from a single global root-level YAML mapping keyed exactly as `mentions` in `channels.yaml`, applied uniformly to all channels; per-channel overrides are out-of-scope for this feature.
+  - **FR-027**: System MUST treat built-in Slack broadcast placeholder forms `@here` (boundary-limited per FR-021) and `@{here}` as special tokens that are always replaced with `<!here>` regardless of presence in the mapping. This replacement follows the same skip rules (code blocks, inline code, block quotes) and counts toward replacements using key `here`.
+  - **FR-028**: System MUST support two mention entry types: `user` (default) and `team`. For type `user` the replacement string MUST be `<@{id}>`. For type `team` the replacement string MUST be `<!subteam^{id}>`. Replacement counts use the placeholder name (mapping key). Invalid or unknown `type` values MUST be treated as `user`.
 
 ### Key Entities _(include if feature involves data)_
 
-- **Mention Mapping**: A collection of key-value pairs where each key is a human-friendly name and each value is a platform user identifier. Used during message composition to resolve placeholder mentions.
-- **Message Placeholder Token**: A literal substring in authored message text with pattern `@{name}` indicating intent to mention the user mapped to `name`.
+- **Mention Entry**: `{ id: string; type?: "user" | "team" }` describing how to format a resolved placeholder. `type` defaults to `user`.
+- **Mention Mapping**: A dictionary: key = placeholder name (string), value = Mention Entry. Used during message composition to resolve placeholder mentions and formatting rules.
+- **Message Placeholder Token**: A literal substring in authored message text with pattern `@{name}` or boundary-limited `@name` indicating intent to mention the mapped entity.
 - **Composed Message**: The final message string after all eligible placeholder tokens are resolved and replaced; may still contain unresolved tokens if mappings were absent.
 
 ---

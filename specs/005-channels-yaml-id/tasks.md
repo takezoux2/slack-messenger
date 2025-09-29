@@ -11,54 +11,54 @@ Feature Goal: Add placeholder mention resolution (`@{name}` and boundary-limited
 
 These establish branch, fixtures, and confirm dependency surface (no new runtime deps expected).
 
-1. T001 Create / update feature branch 005-channels-yaml-id from latest main (git fetch; git checkout -b 005-channels-yaml-id origin/main or rebase if exists).
-2. T002 [P] Add test fixtures directory `tests/fixtures/mentions/` with:
+1. [x] T001 Create / update feature branch 005-channels-yaml-id from latest main (git fetch; git checkout -b 005-channels-yaml-id origin/main or rebase if exists).
+2. [x] T002 [P] Add test fixtures directory `tests/fixtures/mentions/` with:
    - `channels.basic.yaml` (has mentions mapping for alice, team-lead)
    - `channels.edge.yaml` (mentions mapping for team-lead only)
    - `message.basic.md` (quickstart example)
    - `message.edge.md` (edge cases: code fence, inline code, block quote, punctuation)
-3. T003 [P] Ensure no new npm dependencies required; update `README.md` planned features section (add placeholder mention feature line marked WIP).
+3. [x] T003 [P] Ensure no new npm dependencies required; update `README.md` planned features section (add placeholder mention feature line marked WIP).
 
 ## Phase 3.2: Tests First (TDD) – MUST FAIL INITIALLY
 
 Contract, unit, and integration tests authored before any implementation.
 
-4. T004 [P] Contract test for CLI summary output per `contracts/cli-mention-resolution.md` in `tests/contract/cli-mention-resolution.test.ts` (assert textual summary format cases: replacements only, unresolved, none).
-5. T005 [P] Unit test tokenizer in `tests/unit/mention-tokenizer.test.ts` covering:
+4. [x] T004 [P] Contract test for CLI summary output per `contracts/cli-mention-resolution.md` in `tests/contract/cli-mention-resolution.test.ts` (assert textual summary format cases: replacements only, unresolved, none).
+5. [x] T005 [P] Unit test tokenizer in `tests/unit/mention-tokenizer.test.ts` covering:
    - Detect `@{name}` & boundary-limited `@name`
    - Skip inside fenced code blocks
    - Skip inline code spans and block quote lines
    - Ignore `@{}` empty
    - Ensure positions captured.
-6. T006 [P] Unit test resolver in `tests/unit/mention-resolver.test.ts` (mapping application with entry objects `{ id, type }`, unmapped tokens remain, counts aggregation, case sensitivity, duplicate key last-wins scenario).
-7. T007 [P] Unit test summary generator in `tests/unit/mention-summary.test.ts` (alphabetical ordering for replacements, unresolved order-of-first-appearance, none cases → `Placeholders: none`).
-8. T008 [P] Unit test built-in `here` tokens in `tests/unit/mention-here.test.ts` (both `@here ` and `@{here}` replaced with `<!here>` without mapping entry; counts under key `here`).
-9. T009 [P] Unit test team type replacement in `tests/unit/mention-team-type.test.ts` (entry `{ id: S123, type: 'team' }` → `<!subteam^S123>` replacement, counts use key not id).
-10. T010 [P] Unit test invalid or missing type fallback in `tests/unit/mention-invalid-type.test.ts` (unknown `type: 'x'` behaves as `user`; omitted type defaults to `user`).
-11. T011 [P] Integration test basic quickstart flow in `tests/integration/mention-broadcast-basic.test.ts` using `channels.basic.yaml` + `message.basic.md` (object-form entries) asserting message sent (mock Slack) and summary lines.
-12. T012 [P] Integration test edge cases in `tests/integration/mention-broadcast-edge-cases.test.ts` using `channels.edge.yaml` + `message.edge.md` (ensures skipping logic and selective replacements including `here`).
-13. T013 [P] Integration test dry-run behavior in `tests/integration/mention-broadcast-dry-run.test.ts` (with `--dry-run` flag ensures no Slack call, but summary produced).
-14. T014 Add negative unit test for punctuation adjacency in `tests/unit/mention-tokenizer-boundary.test.ts` (ensures `@name,` not replaced for no-brace form; end-of-line works).
+6. [x] T006 [P] Unit test resolver in `tests/unit/mention-resolver.test.ts` (mapping application with entry objects `{ id, type }`, unmapped tokens remain, counts aggregation, case sensitivity, duplicate key last-wins scenario).
+7. [x] T007 [P] Unit test summary generator in `tests/unit/mention-summary.test.ts` (alphabetical ordering for replacements, unresolved order-of-first-appearance, none cases → `Placeholders: none`).
+8. [x] T008 [P] Unit test built-in `here` tokens in `tests/unit/mention-here.test.ts` (both `@here ` and `@{here}` replaced with `<!here>` without mapping entry; counts under key `here`).
+9. [x] T009 [P] Unit test team type replacement in `tests/unit/mention-team-type.test.ts` (entry `{ id: S123, type: 'team' }` → `<!subteam^S123>` replacement, counts use key not id).
+10. [x] T010 [P] Unit test invalid or missing type fallback in `tests/unit/mention-invalid-type.test.ts` (unknown `type: 'x'` behaves as `user`; omitted type defaults to `user`).
+11. [x] T011 [P] Integration test basic quickstart flow in `tests/integration/mention-broadcast-basic.test.ts` using `channels.basic.yaml` + `message.basic.md` (object-form entries) asserting message sent (mock Slack) and summary lines.
+12. [x] T012 [P] Integration test edge cases in `tests/integration/mention-broadcast-edge-cases.test.ts` using `channels.edge.yaml` + `message.edge.md` (ensures skipping logic and selective replacements including `here`).
+13. [x] T013 [P] Integration test dry-run behavior in `tests/integration/mention-broadcast-dry-run.test.ts` (with `--dry-run` flag ensures no Slack call, but summary produced).
+14. [x] T014 Add negative unit test for punctuation adjacency in `tests/unit/mention-tokenizer-boundary.test.ts` (ensures `@name,` not replaced for no-brace form; end-of-line works).
 
 ## Phase 3.3: Core Model & Service Implementation
 
 Models first, then parsing/resolution service, then configuration & pipeline integration.
 
-15. T015 [P] Implement `MentionMapping` & `MentionEntry` types in `src/models/mention-mapping.ts` per data-model (interface only; no logic yet).
-16. T016 [P] Implement `PlaceholderToken` type in `src/models/placeholder-token.ts`.
-17. T017 [P] Implement `ResolutionSummary` type in `src/models/resolution-summary.ts`.
-18. T018 Create `src/services/mention-resolution.service.ts` scaffold exporting: `extractTokens(text: string): PlaceholderToken[]`, `applyMentions(text: string, mapping: Record<string, MentionEntry>): { text: string; summary: ResolutionSummary }` with TODO bodies (return pass-through).
-19. T019 Implement tokenizer logic in `mention-resolution.service.ts` (single-pass scanner with state for fenced code, inline code, block quotes) – satisfy T005 & T014.
-20. T020 Implement resolver + summary aggregation & type-based formatting (`user` / `team` / built-in here) in `mention-resolution.service.ts` (counts, alphabetical sorting, unresolved ordering) – satisfy T006-T010.
-21. T021 Extend YAML config loader `src/services/yaml-config.service.ts` to parse root-level `mentions:` map into entry objects (validate object shape, default missing/invalid type to `user`). Update related type in `src/models/channel-configuration.ts` only if root-level typing needed.
-22. T022 Integrate mention resolution into broadcast pipeline before Slack send: modify appropriate service (e.g., `slack.service.ts` or message assembly layer) capturing transformed text and summary object. Provide hook to skip if no placeholders.
-23. T023 Update CLI output code (`src/services/console.service.ts` or relevant command) to print deterministic summary lines after broadcast/dry-run (ensuring existing outputs preserved). Must satisfy T004 contract tests.
-24. T024 Ensure dry-run path (`broadcast-dry-run.service.ts`) also invokes resolution & summary printing (no Slack API call) – satisfy T013.
-25. T025 Add guard + unit test adjustments if necessary for performance (fast path: if `@` absent in string, skip tokenizer) (update service & add assertion in existing unit test file or new `tests/unit/mention-performance-fastpath.test.ts`).
+15. [x] T015 [P] Implement `MentionMapping` & `MentionEntry` types in `src/models/mention-mapping.ts` per data-model (interface only; no logic yet).
+16. [x] T016 [P] Implement `PlaceholderToken` type in `src/models/placeholder-token.ts`.
+17. [x] T017 [P] Implement `ResolutionSummary` type in `src/models/resolution-summary.ts`.
+18. [x] T018 Create `src/services/mention-resolution.service.ts` scaffold exporting: `extractTokens(text: string): PlaceholderToken[]`, `applyMentions(text: string, mapping: Record<string, MentionEntry>): { text: string; summary: ResolutionSummary }` with TODO bodies (return pass-through).
+19. [x] T019 Implement tokenizer logic in `mention-resolution.service.ts` (single-pass scanner with state for fenced code, inline code, block quotes) – satisfy T005 & T014.
+20. [x] T020 Implement resolver + summary aggregation & type-based formatting (`user` / `team` / built-in here) in `mention-resolution.service.ts` (counts, alphabetical sorting, unresolved ordering) – satisfy T006-T010.
+21. [x] T021 Extend YAML config loader `src/services/yaml-config.service.ts` to parse root-level `mentions:` map into entry objects (validate object shape, default missing/invalid type to `user`). Update related type in `src/models/channel-configuration.ts` only if root-level typing needed.
+22. [x] T022 Integrate mention resolution into broadcast pipeline before Slack send: modify appropriate service (e.g., `slack.service.ts` or message assembly layer) capturing transformed text and summary object. Provide hook to skip if no placeholders.
+23. [x] T023 Update CLI output code (`src/services/console.service.ts` or relevant command) to print deterministic summary lines after broadcast/dry-run (ensuring existing outputs preserved). Must satisfy T004 contract tests.
+24. [x] T024 Ensure dry-run path (`broadcast-dry-run.service.ts`) also invokes resolution & summary printing (no Slack API call) – satisfy T013.
+25. [x] T025 Add guard + unit test adjustments if necessary for performance (fast path: if `@` absent in string, skip tokenizer) (update service & add assertion in existing unit test file or new `tests/unit/mention-performance-fastpath.test.ts`).
 
 ## Phase 3.4: Integration & Validation Enhancements
 
-26. T026 Add validation in `config-validation.service.ts` for `mentions:` map entry object shape (id required, optional type) with unit test `tests/unit/mentions-config-validation.test.ts`.
+26. [x] T026 Add validation in `config-validation.service.ts` for `mentions:` map entry object shape (id required, optional type) with unit test `tests/unit/mentions-config-validation.test.ts`.
 27. T027 Add additional integration test with multiple channels present validating the single global mapping usage in `tests/integration/mention-multi-channel.test.ts` (ensures uniform resolution across channels including team & here tokens if present).
 28. T028 Add integration test ensuring unmapped placeholders remain literal and reported summary in `tests/integration/mention-unmapped.test.ts`.
 29. T029 Refactor mention-resolution service for purity & export internal helper for test clarity (if complexity > ~150 LOC) – keep public API stable.

@@ -112,6 +112,60 @@ export class ConfigValidationService {
       }
     }
 
+    // Validate mentions mapping (T026)
+    if (config.mentions !== undefined) {
+      const mentions = config.mentions as Record<string, any>
+      if (mentions && typeof mentions === 'object') {
+        for (const [key, value] of Object.entries(mentions)) {
+          const baseField = `mentions.${key}`
+          if (!key || key.trim().length === 0) {
+            errors.push({
+              field: baseField,
+              message: 'Mention key must be a non-empty string',
+              value: key,
+            })
+            continue
+          }
+          if (!value || typeof value !== 'object') {
+            errors.push({
+              field: baseField,
+              message:
+                'Mention entry must be an object with at least an id property',
+              value: value as any,
+            })
+            continue
+          }
+          if (
+            !('id' in value) ||
+            typeof (value as any).id !== 'string' ||
+            (value as any).id.trim().length === 0
+          ) {
+            errors.push({
+              field: `${baseField}.id`,
+              message: 'Mention entry must contain non-empty string id',
+              value: (value as any).id,
+            })
+          }
+          if ('type' in value) {
+            const t = (value as any).type
+            if (t !== undefined && t !== 'user' && t !== 'team') {
+              errors.push({
+                field: `${baseField}.type`,
+                message: 'Mention type, if provided, must be "user" or "team"',
+                value: t,
+              })
+            }
+          }
+        }
+      } else {
+        errors.push({
+          field: 'mentions',
+          message: 'Mentions mapping must be an object',
+          value: config.mentions as any,
+        })
+      }
+    }
+
     return {
       isValid: errors.length === 0,
       errors,

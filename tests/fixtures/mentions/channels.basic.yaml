@@ -1,0 +1,12 @@
+mentions:
+  alice:
+    id: U111AAA
+  team-lead:
+    id: S222TEAM
+    type: team
+
+# Minimal channel list to enable integration tests
+channel_lists:
+  - name: basic
+    channels:
+      - C1234567890

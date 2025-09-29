@@ -69,9 +69,29 @@ export class BroadcastMessageCommand {
     try {
       this.logVerbose(output, 'Starting broadcast command...')
 
-      // Validate broadcast options
+      // Support message file input by loading it before validation (so validation sees inline message)
+      // @ts-ignore messageFile may be passed via CLI parsing though not in interface
+      const messageFile: string | undefined = (options as any).messageFile
+      let loadedMessageFromFile: string | undefined
+      if (messageFile) {
+        try {
+          const mi = await FileMessageLoaderService.load(messageFile)
+          loadedMessageFromFile = mi.content
+        } catch (e) {
+          const err = e instanceof Error ? e : new Error(String(e))
+          return this.createFailureResult(err, 1, output)
+        }
+      }
+
+      // Build effective options object for validation without mutating original (which has getter-only props)
+      const effectiveOptions: BroadcastOptions = {
+        ...options,
+        message: loadedMessageFromFile || options.message,
+      }
+
+      // Validate broadcast options (now possibly containing file-loaded message)
       const optionsValidation =
-        this.configValidationService.validateBroadcastOptions(options)
+        this.configValidationService.validateBroadcastOptions(effectiveOptions)
       if (!optionsValidation.isValid) {
         const error = new Error(
           `Invalid options: ${optionsValidation.errors.map(e => e.message).join(', ')}`
@@ -151,17 +171,13 @@ export class BroadcastMessageCommand {
       )
 
       // Determine message input (file or inline). For broadcast, options.message is required by validation today; extend to support messageFile when CLI adds it
-      let messageContent = options.message
-      // @ts-ignore - messageFile will be present on CommandLineOptions; BroadcastOptions doesn't include it
-      const messageFile: string | undefined = (options as any).messageFile
+      let messageContent = effectiveOptions.message
       if (messageFile) {
-        const mi = await FileMessageLoaderService.load(messageFile)
         this.logVerbose(
           output,
-          `source: file (path: ${mi.filePath}) | preview: ${MessageInput.preview200(mi.content)}`
+          `source: file (path: ${messageFile}) | preview: ${MessageInput.preview200(messageContent || '')}`
         )
-        messageContent = mi.content
-      } else {
+      } else if (typeof messageContent === 'string') {
         this.logVerbose(
           output,
           `source: inline (length: ${messageContent.length})`

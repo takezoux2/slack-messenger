@@ -11,6 +11,16 @@ import { SendMessageCommand } from './commands/send-message.command.js'
 import { BroadcastMessageCommand } from './commands/broadcast-message.command.js'
 import { ListChannelsCommand } from './commands/list-channels.command.js'
 import { ErrorHandlerService } from './services/error-handler.service.js'
+import { CommandLineOptions } from './models/command-line-options.js'
+import type { BroadcastOptions } from './models/broadcast-options.js'
+import type { ListCommandArgs } from './models/command-line-options.js'
+
+// Extended types for runtime-augmented options (supporting messageFile for broadcast)
+interface BroadcastExecutionOptions extends BroadcastOptions {
+  messageFile?: string | undefined
+}
+
+type ExecutableCliOptions = CommandLineOptions
 
 /**
  * Main application function
@@ -42,7 +52,7 @@ async function main(): Promise<void> {
     }
 
     // Parse options
-    let options: any
+    let options: ExecutableCliOptions
     try {
       options = cliService.parseArgs(argv)
     } catch (error) {
@@ -178,7 +188,7 @@ async function main(): Promise<void> {
  * Execute the send-message command
  */
 async function executeSendMessageCommand(
-  options: any, // Using CommandLineOptions would create circular import
+  options: CommandLineOptions, // Concrete type
   errorHandler: ErrorHandlerService
 ): Promise<void> {
   try {
@@ -209,7 +219,7 @@ async function executeSendMessageCommand(
     // Handle command execution errors
     const formattedError = errorHandler.handleError(error, {
       command: 'send-message',
-      channelId: options.channelId,
+      channelId: options.channelId || '',
       operation: 'command-execution',
     })
 
@@ -226,7 +236,7 @@ async function executeSendMessageCommand(
  * Execute the broadcast command
  */
 async function executeBroadcastCommand(
-  options: any,
+  options: CommandLineOptions,
   errorHandler: ErrorHandlerService
 ): Promise<void> {
   try {
@@ -234,8 +244,22 @@ async function executeBroadcastCommand(
     const command = BroadcastMessageCommand.fromEnvironment({
       verboseLogging: options.verbose,
     })
-    options.listName = options.channelId
-    const result = await command.execute(options)
+    // Build a plain broadcast options object to avoid mutating CommandLineOptions (getters only)
+    const broadcastOptions: BroadcastExecutionOptions = {
+      configPath: options.configPath || './channels.yaml',
+      listName: (options.channelList || options.channelId || '').toString(),
+      message: (options.message || '').toString(),
+      dryRun: !!options.dryRun,
+      verbose: !!options.verbose,
+      messageFile: options.messageFile
+        ? options.messageFile.toString()
+        : undefined,
+    }
+    if (options.token) {
+      broadcastOptions.token = options.token.toString()
+    }
+
+    const result = await command.execute(broadcastOptions)
 
     // Output results: info to stdout, errors to stderr
     result.output.forEach(line => {
@@ -273,7 +297,7 @@ async function executeBroadcastCommand(
  * Execute the list-channels command
  */
 async function executeListChannelsCommand(
-  options: any,
+  options: CommandLineOptions,
   errorHandler: ErrorHandlerService
 ): Promise<void> {
   try {
@@ -282,7 +306,11 @@ async function executeListChannelsCommand(
       verboseLogging: options.verbose,
     })
 
-    const result = await command.execute(options)
+    // Construct minimal args for list command
+    const listArgs: ListCommandArgs = options.configPath
+      ? { config: options.configPath }
+      : {}
+    const result = await command.execute(listArgs)
 
     // Output results: info to stdout, errors to stderr
     result.output.forEach(line => {

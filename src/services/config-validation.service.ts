@@ -9,7 +9,7 @@ import type { BroadcastOptions } from '../models/broadcast-options'
 export interface ValidationError {
   field: string
   message: string
-  value?: any
+  value?: string | number | boolean | null | undefined | Date
 }
 
 /**
@@ -50,7 +50,6 @@ export class ConfigValidationService {
       errors.push({
         field: 'channelLists',
         message: 'Channel lists must be an array',
-        value: config.channelLists,
       })
     } else {
       // Validate we have at least one list
@@ -58,7 +57,6 @@ export class ConfigValidationService {
         errors.push({
           field: 'channelLists',
           message: 'Configuration must contain at least one channel list',
-          value: config.channelLists,
         })
       }
 
@@ -75,7 +73,6 @@ export class ConfigValidationService {
           errors.push({
             field: `channelLists[${i}]`,
             message: 'Channel list cannot be null or undefined',
-            value: list,
           })
         }
       }
@@ -151,7 +148,6 @@ export class ConfigValidationService {
       errors.push({
         field: `${listContext}.channels`,
         message: 'Channels must be an array',
-        value: list.channels,
       })
     } else {
       if (list.channels.length === 0) {
@@ -185,7 +181,6 @@ export class ConfigValidationService {
         errors.push({
           field: `${listContext}.resolvedChannels`,
           message: 'Resolved channels must be an array',
-          value: list.resolvedChannels,
         })
       }
     }

@@ -44,7 +44,7 @@ describe('CLI Interface Contract — --message-file', () => {
   it('help text should mention -F, --message-file', async () => {
     const { stdout, exitCode } = await execCommand(['send-message', '--help'])
     expect(exitCode).toBe(0)
-    expect(stdout).toMatch(/--message-file|\-F, --message-file/i)
+    expect(stdout).toMatch(/--message-file|-F, --message-file/i)
   })
 
   it('should error when both inline message and --message-file are provided', async () => {

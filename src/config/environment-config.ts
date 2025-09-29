@@ -66,16 +66,15 @@ export class EnvironmentConfigLoader {
   private loadConfiguration(): EnvironmentConfig {
     return {
       slackBotToken: this.getEnvVar('SLACK_BOT_TOKEN'),
-      logLevel: this.getEnvVar('SLACK_LOG_LEVEL', 'info'),
-      nodeEnv: this.getEnvVar('NODE_ENV', 'development'),
+      logLevel: this.getEnvVar('SLACK_LOG_LEVEL', 'info') || 'info',
+      nodeEnv: this.getEnvVar('NODE_ENV', 'development') || 'development',
       timeout: this.getEnvNumber('SLACK_TIMEOUT', 10000),
       retries: this.getEnvNumber('SLACK_RETRIES', 3),
       verboseMode: this.getEnvBoolean('SLACK_VERBOSE', false),
     }
   }
 
-  private getEnvVar(key: string, defaultValue: string): string
-  private getEnvVar(key: string): string | undefined
+  // Unified overload to satisfy eslint no-dupe-class-members
   private getEnvVar(key: string, defaultValue?: string): string | undefined {
     const value = process.env[key]
     if (value !== undefined) {

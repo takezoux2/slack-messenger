@@ -14,7 +14,8 @@ export class FileMessageLoaderService {
       // No explicit encoding validation; rely on Node's decoding behavior
       return MessageInput.fromFileContent(raw, absolute)
     } catch (error) {
-      const err = error as NodeJS.ErrnoException
+      // Narrow to common Node.js error shape without referencing NodeJS namespace (eslint no-undef safeguard)
+      const err = error as { code?: string; message?: string }
       if (err && (err.code === 'ENOENT' || err.code === 'ENOTDIR')) {
         throw new Error(`Message file not found: ${path}`)
       }

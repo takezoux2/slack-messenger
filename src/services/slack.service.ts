@@ -50,7 +50,7 @@ export class SlackService {
     target: ChannelTarget
   ): Promise<MessageDeliveryResult> {
     const startTime = Date.now()
-    let retryCount = 0
+    const retryCount = 0
 
     try {
       // Validate authentication

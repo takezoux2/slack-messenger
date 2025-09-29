@@ -171,7 +171,7 @@ export class BroadcastMessageCommand {
       )
 
       // Determine message input (file or inline). For broadcast, options.message is required by validation today; extend to support messageFile when CLI adds it
-      let messageContent = effectiveOptions.message
+      const messageContent = effectiveOptions.message
       if (messageFile) {
         this.logVerbose(
           output,

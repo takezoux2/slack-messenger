@@ -10,7 +10,8 @@
   "packageManager": "yarn@4.0.0",
   "scripts": {
     "build": "tsc",
-    "start": "node scripts/start.cjs",
+    "start": "tsx src/main.ts",
+    "start:legacy": "node scripts/start.cjs",
     "run": "node dist/main.js",
     "dev": "tsc --watch",
     "test": "vitest run",

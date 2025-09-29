@@ -143,19 +143,19 @@ async function main(): Promise<void> {
 
     // Execute the appropriate command
     switch (options.command) {
-      case 'send-message':
+      case 'send-message': {
         await executeSendMessageCommand(options, errorHandler)
         break
-
-      case 'broadcast':
+      }
+      case 'broadcast': {
         await executeBroadcastCommand(options, errorHandler)
         break
-
-      case 'list-channels':
+      }
+      case 'list-channels': {
         await executeListChannelsCommand(options, errorHandler)
         break
-
-      default:
+      }
+      default: {
         const error = new Error(`Unknown command: ${options.command}`)
         const formattedError = errorHandler.handleError(error, {
           command: options.command,
@@ -165,6 +165,7 @@ async function main(): Promise<void> {
         console.error(formattedError.message)
         console.error('\nUse --help for available commands.')
         process.exit(formattedError.exitCode)
+      }
     }
   } catch (error) {
     // Handle unexpected errors

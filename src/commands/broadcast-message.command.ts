@@ -259,6 +259,21 @@ export class BroadcastMessageCommand {
       // Handle dry run
       if (options.dryRun) {
         this.logVerbose(output, 'Performing dry run simulation...')
+        if (this.verboseLogging) {
+          // Show the exact (post-mention-resolution) message that would be sent
+          const len =
+            typeof messageContent === 'string' ? messageContent.length : 0
+          // Escape newlines for single-line verbose log clarity
+          const oneLine = (messageContent || '')
+            .replace(/\r/g, '')
+            .split('\n')
+            .map(l => l.trimEnd())
+            .join(' \n ')
+          this.logVerbose(
+            output,
+            `Dry-run message body (length: ${len}): ${oneLine}`
+          )
+        }
         const dryRunResult = await this.dryRunService.simulateBroadcast(
           resolvedChannels,
           messageContent,

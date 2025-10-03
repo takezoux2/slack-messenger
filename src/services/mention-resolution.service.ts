@@ -99,19 +99,28 @@ export function extractTokens(text: string): PlaceholderToken[] {
         i++
         continue
       }
-      // No-brace form; collect until space or newline
+      // No-brace form; collect until boundary (space, CR, newline, punctuation, or EOS)
       if (next && next !== ' ' && next !== '\n') {
+        const isBoundaryPunctuation = (c: string) =>
+          // Japanese full-width punctuation (treat as boundary) – do NOT include ASCII comma/period to preserve existing tests
+          /[、。！？，．？！：；]/.test(c)
         let j = i + 1
-        while (j < len && text[j] !== ' ' && text[j] !== '\n') j++
-        const boundaryChar = j < len ? text[j] : ''
-        const name = text.slice(i + 1, j)
-        // Boundary rule: must end at space, newline, or end-of-string
-        if (
-          name.length > 0 &&
-          (boundaryChar === ' ' || boundaryChar === '' || boundaryChar === '\n')
-        ) {
-          // Punctuation adjacency check: ensure last char of name not punctuation followed immediately by punctuation char (handled by boundary rule already)
-          // Additional rule: if next char after name is punctuation (e.g., comma) we skip (already excluded by boundaryChar condition)
+        while (j < len) {
+          const cj: string = text[j]!
+          if (
+            cj === ' ' ||
+            cj === '\n' ||
+            cj === '\r' ||
+            isBoundaryPunctuation(cj)
+          )
+            break
+          j++
+        }
+        let name = text.slice(i + 1, j)
+        // Trim a trailing CR (Windows line ending) if present
+        if (name.endsWith('\r')) name = name.slice(0, -1)
+        // Accept boundary if space/newline/EOS or punctuation (but require non-empty name)
+        if (name.length > 0) {
           tokens.push({
             original: text.slice(i, i + 1 + name.length),
             name,
@@ -233,6 +242,68 @@ export function applyMentions(
     hadPlaceholders: true,
   }
 
+  // Fallback: if no replacements were made but mapping contains keys that appear plainly,
+  // attempt a simpler safe regex-based substitution (helps if tokenizer missed cases).
+  if (summary.totalReplacements === 0) {
+    const keys = Object.keys(mapping || {})
+    if (keys.length > 0) {
+      let fallbackApplied = false
+      let mutated = output
+      const fallbackCounts: Record<string, number> = {}
+
+      for (const key of keys) {
+        // Skip if already captured as unresolved literal (means tokenizer saw it but mapping missing)
+        if (
+          summary.unresolved.includes(`@${key}`) ||
+          summary.unresolved.includes(`@{${key}}`)
+        ) {
+          continue
+        }
+        const entry: any = (mapping as any)[key]
+        if (!entry) continue
+        const replacement =
+          typeof entry === 'string'
+            ? `<@${entry}>`
+            : entry.type === 'team'
+              ? `<!subteam^${entry.id}>`
+              : `<@${entry.id}>`
+
+        // Regex (fallback mode): match @key followed strictly by whitespace or end-of-string.
+        // Intentionally excludes punctuation boundaries (e.g., comma) to respect tokenizer rule
+        // that no-brace placeholders adjacent to ASCII punctuation are NOT valid.
+        const pattern = new RegExp(`@${key}(?=$|\s)`, 'g')
+        const before = mutated
+        mutated = mutated.replace(pattern, _ => {
+          fallbackCounts[key] = (fallbackCounts[key] || 0) + 1
+          fallbackApplied = true
+          return replacement
+        })
+        // Avoid runaway: if string changed drastically, continue; else next key
+        if (before !== mutated) {
+          // continue scanning other keys
+        }
+      }
+
+      if (fallbackApplied) {
+        output = mutated
+        // Merge counts
+        const mergedKeys = new Set([
+          ...Object.keys(sorted),
+          ...Object.keys(fallbackCounts),
+        ])
+        const merged: Record<string, number> = {}
+        for (const k of Array.from(mergedKeys).sort()) {
+          merged[k] = (sorted[k] || 0) + (fallbackCounts[k] || 0)
+        }
+        summary.replacements = merged
+        summary.totalReplacements = Object.values(merged).reduce(
+          (a, b) => a + b,
+          0
+        )
+      }
+    }
+  }
+
   return { text: output, summary }
 }
 
@@ -244,7 +315,6 @@ export function formatResolutionSummary(summary: ResolutionSummary): string[] {
   if (!summary.hadPlaceholders) {
     return ['Placeholders: none']
   }
-
   const keys = Object.keys(summary.replacements).sort()
   const replacementLine =
     keys.length > 0

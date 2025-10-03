@@ -3,11 +3,11 @@ import { describe, it, expect } from 'vitest'
 import { applyMentions } from '../../src/services/mention-resolution.service'
 
 describe('mention tokenizer boundary (punctuation)', () => {
-  it('does not replace no-brace placeholder followed by comma', () => {
+  it('does NOT replace no-brace placeholder followed immediately by ASCII comma', () => {
     const mapping = { name: { id: 'U1' } }
-    const input = 'Hello @name, world' // comma adjacency means no replacement for no-brace form
+    const input = 'Hello @name, world'
     const { text, summary } = applyMentions(input, mapping)
-    expect(text).toContain('@name,')
+    expect(text).toContain('@name, world')
     expect(summary.totalReplacements).toBe(0)
   })
 

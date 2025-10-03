@@ -3,6 +3,8 @@
 Auto-generated from all feature plans. Last updated: 2025-09-23
 
 ## Active Technologies
+- TypeScript 5.x (Node.js 22) + @slack/web-api, commander.js, js-yaml (005-channels-yaml-id)
+- YAML configuration file (`channels.yaml`); no database (005-channels-yaml-id)
 
 - [e.g., Python 3.11, Swift 5.9, Rust 1.75 or NEEDS CLARIFICATION] + [e.g., FastAPI, UIKit, LLVM or NEEDS CLARIFICATION] (004-load-message-from)
 - [if applicable, e.g., PostgreSQL, CoreData, files or N/A] (004-load-message-from)
@@ -29,11 +31,11 @@ npm test; npm run lint
 TypeScript 5.x with Node.js 22: Follow standard conventions
 
 ## Recent Changes
+- 005-channels-yaml-id: Added TypeScript 5.x (Node.js 22) + @slack/web-api, commander.js, js-yaml
 
 - 004-load-message-from: Added [e.g., Python 3.11, Swift 5.9, Rust 1.75 or NEEDS CLARIFICATION] + [e.g., FastAPI, UIKit, LLVM or NEEDS CLARIFICATION]
 
 - 004-load-channel-id: Added TypeScript 5.x with Node.js 22+ + @slack/web-api, commander.js, js-yaml for YAML parsing
-- 002-send-slack-message: Added TypeScript 5.x with Node.js 22+ + @slack/web-api, commander.js for CLI parsing
 
 <!-- MANUAL ADDITIONS START -->
 <!-- MANUAL ADDITIONS END -->

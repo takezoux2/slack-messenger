@@ -4,3 +4,9 @@ channel_lists:
     channels:
       - C09HERT8BFA
       - C09GFMCJSLT
+mentions:
+  takezoux2:
+    id: U01EXAMPLE1
+  leader:
+    id: S01TEAM1234
+    type: team

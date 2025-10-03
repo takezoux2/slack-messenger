@@ -1,66 +1,50 @@
-<!--
-Sync Impact Report:
-Version: 0.0.0 → 1.0.0
-New sections: All core principles and governance established
-Modified principles: N/A (initial version)
-Added sections: TypeScript Standards, Development Workflow
-Removed sections: N/A
-Templates requiring updates:
-✅ plan-template.md - Constitution Check placeholders compatible
-✅ spec-template.md - No constitution-specific requirements
-✅ tasks-template.md - TDD principle aligned with Phase 3.2 requirements
-✅ agent-file-template.md - Compatible with TypeScript/Yarn focus
-Follow-up TODOs: None
--->
-
-# Slack Messenger Constitution
+# [PROJECT_NAME] Constitution
+<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
 
 ## Core Principles
 
-### I. TypeScript-First Development
+### [PRINCIPLE_1_NAME]
+<!-- Example: I. Library-First -->
+[PRINCIPLE_1_DESCRIPTION]
+<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
 
-All application code MUST be written in TypeScript with strict type checking enabled. Type definitions MUST be explicit for public interfaces, function parameters, and return values. No `any` types allowed in production code except for documented external library integrations. This ensures code reliability, maintainability, and enables powerful IDE support for development velocity.
+### [PRINCIPLE_2_NAME]
+<!-- Example: II. CLI Interface -->
+[PRINCIPLE_2_DESCRIPTION]
+<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
 
-### II. Yarn Package Management
+### [PRINCIPLE_3_NAME]
+<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
+[PRINCIPLE_3_DESCRIPTION]
+<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
 
-All dependency management MUST use Yarn with lockfile commitment for reproducible builds. New dependencies MUST be justified and reviewed before addition. Package resolution MUST be deterministic across environments. This principle ensures consistent development environments and reliable deployments.
+### [PRINCIPLE_4_NAME]
+<!-- Example: IV. Integration Testing -->
+[PRINCIPLE_4_DESCRIPTION]
+<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
 
-### III. Test-First Development (NON-NEGOTIABLE)
+### [PRINCIPLE_5_NAME]
+<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
+[PRINCIPLE_5_DESCRIPTION]
+<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
 
-TDD is mandatory: Tests MUST be written first, MUST fail initially, then implementation follows to make tests pass. Contract tests MUST precede API implementation. Integration tests MUST be written before feature integration. The Red-Green-Refactor cycle is strictly enforced. No code ships without comprehensive test coverage.
+## [SECTION_2_NAME]
+<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
 
-### IV. Specification-Driven Development
+[SECTION_2_CONTENT]
+<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
 
-Every feature MUST begin with a complete specification following the `.specify` framework. All requirements MUST be documented in spec.md before planning begins. Implementation plans MUST derive from specifications. This ensures clarity of purpose, reduces scope creep, and enables predictable delivery.
+## [SECTION_3_NAME]
+<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
 
-### V. Slack API Compliance
-
-All Slack integrations MUST follow official Slack API patterns and best practices. Rate limiting MUST be respected with proper backoff strategies. OAuth flows MUST be implemented securely. Error handling MUST align with Slack's error response formats. This ensures reliable integration with the Slack platform.
-
-## TypeScript Standards
-
-**Strict Configuration**: TypeScript compiler MUST use strict mode with `noImplicitAny`, `strictNullChecks`, and `noUnusedLocals` enabled. ESLint MUST enforce consistent coding style with TypeScript-specific rules.
-
-**Interface Design**: Public interfaces MUST be defined with clear contracts. Generic types MUST be used appropriately for reusable components. Union types MUST be preferred over inheritance for data modeling.
-
-**Module Structure**: Code MUST be organized in modules with clear separation of concerns. Barrel exports (`index.ts`) MUST be used for clean public APIs. Circular dependencies are prohibited.
-
-## Development Workflow
-
-**Feature Lifecycle**: All features follow the specification → plan → tasks → implementation → validation cycle. Each phase has defined gates that MUST be passed before proceeding.
-
-**Code Review**: All changes MUST be reviewed with focus on TypeScript compliance, test coverage, and Slack API best practices. PRs MUST include updated tests and documentation.
-
-**Version Control**: Feature branches MUST follow the naming pattern `###-feature-name`. Commits MUST be atomic and follow conventional commit format.
+[SECTION_3_CONTENT]
+<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
 
 ## Governance
+<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
 
-This constitution supersedes all other development practices and guides. All implementation decisions MUST align with these principles. When conflicts arise, constitution principles take precedence.
+[GOVERNANCE_RULES]
+<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
 
-Amendments require documentation of impact, approval process, and migration plan for existing code. Version bumps follow semantic versioning with full impact analysis.
-
-All PRs and code reviews MUST verify constitutional compliance. Complexity that violates principles MUST be justified with documented rationale or the approach MUST be simplified.
-
-Use `.github/copilot-instructions.md` for runtime development guidance and implementation details.
-
-**Version**: 1.0.0 | **Ratified**: 2025-09-23 | **Last Amended**: 2025-09-23
+**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
+<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->

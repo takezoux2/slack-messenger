@@ -1,6 +1,7 @@
 import fs from 'fs/promises'
 import yaml from 'js-yaml'
 import type { ChannelConfiguration } from '../models/channel-configuration'
+import type { MentionMapping } from '../models/mention-mapping'
 import type { NamedChannelList } from '../models/named-channel-list'
 import type { ChannelTarget } from '../models/channel-target'
 
@@ -45,7 +46,7 @@ export class YamlConfigService {
         throw new Error('Configuration file must contain a valid YAML object')
       }
 
-      // Validate required structure
+      // Validate required structure (channel_lists still required)
       if (!parsedYaml.channel_lists) {
         throw new Error(
           'Configuration file must contain a "channel_lists" section'
@@ -133,8 +134,34 @@ export class YamlConfigService {
         })
       }
 
+      // Parse optional mentions mapping (root-level 'mentions')
+      let mentions: MentionMapping | undefined
+      if (parsedYaml.mentions && typeof parsedYaml.mentions === 'object') {
+        mentions = {}
+        for (const [key, value] of Object.entries(parsedYaml.mentions)) {
+          if (!key || typeof key !== 'string') continue
+          if (value && typeof value === 'object') {
+            const id = (value as any).id
+            const typeRaw = (value as any).type
+            if (typeof id === 'string' && id.trim().length > 0) {
+              const type = typeRaw === 'team' ? 'team' : 'user'
+              mentions[key] = { id: id.trim(), type }
+            }
+          } else if (typeof value === 'string') {
+            // Future-backcompat: plain string value means user id
+            if (value.trim().length > 0) {
+              mentions[key] = { id: value.trim(), type: 'user' }
+            }
+          }
+        }
+        if (Object.keys(mentions).length === 0) {
+          mentions = undefined
+        }
+      }
+
       const configuration: ChannelConfiguration = {
         channelLists,
+        mentions,
         filePath,
         lastModified,
       }

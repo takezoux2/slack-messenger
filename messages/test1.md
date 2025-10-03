@@ -1,5 +1,6 @@
 _test_
-@takezoux2(竹下)
+@takezoux2
+@leader
 
 - list1
 - list2

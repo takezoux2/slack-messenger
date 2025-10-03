@@ -159,13 +159,19 @@ export class BroadcastDryRunService {
 
     lines.push('')
 
-    // Message preview
+    // Message preview (possibly truncated) + always full resolved message
     lines.push('Message preview:')
-    const truncatedMessage =
-      result.message.length > 100
-        ? `"${result.message.substring(0, 100)}..."`
-        : `"${result.message}"`
-    lines.push(truncatedMessage)
+    const needsTruncate = result.message.length > 1000
+    if (needsTruncate) {
+      lines.push(`"${result.message.substring(0, 1000)}..."`)
+    } else {
+      lines.push(`"${result.message}"`)
+    }
+    lines.push('')
+    lines.push('Resolved message (after replacements):')
+    lines.push('---8<--- start ---')
+    lines.push(result.message)
+    lines.push('---8<--- end ---')
     lines.push('')
 
     // Warnings

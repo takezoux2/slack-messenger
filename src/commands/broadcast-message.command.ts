@@ -16,7 +16,12 @@ import type { ChannelConfiguration } from '../models/channel-configuration'
 import type { ResolvedChannel } from '../models/resolved-channel'
 import type { DryRunResult } from '../services/broadcast-dry-run.service'
 import { MessageInput } from '../models/message-input.js'
+import {
+  applyMentions,
+  formatResolutionSummary,
+} from '../services/mention-resolution.service.js'
 import { FileMessageLoaderService } from '../services/file-message-loader.service.js'
+import { LoggingService } from '../services/logging.service.js'
 
 export interface BroadcastCommandConfig {
   slackService?: SlackService
@@ -43,6 +48,7 @@ export class BroadcastMessageCommand {
   private readonly dryRunService: BroadcastDryRunService
   private readonly errorHandler: ErrorHandlerService
   private readonly verboseLogging: boolean
+  private readonly logging = LoggingService.getInstance()
 
   constructor(config?: BroadcastCommandConfig) {
     this.verboseLogging = config?.verboseLogging || false
@@ -155,23 +161,40 @@ export class BroadcastMessageCommand {
         `Found channel list "${options.listName}" with ${targetList.channels.length} channels`
       )
 
-      // Test authentication
-      this.logVerbose(output, 'Validating Slack authentication...')
-      const authTest = await this.slackService.testAuthentication()
-      if (!authTest.valid) {
-        const error = new Error(
-          `Authentication failed: ${authTest.error || 'Unknown error'}`
-        )
-        return this.createFailureResult(error, 2, output)
+      // Test bypass for integration tests (no real Slack): if dry-run and env flag set, fabricate resolved channels
+      const testBypass =
+        options.dryRun &&
+        (process.env['SM_TEST_BYPASS_SLACK'] === '1' || !!process.env['VITEST'])
+      let resolvedChannels: ResolvedChannel[] | null = null
+      if (testBypass) {
+        resolvedChannels = targetList.channels.map((c, idx) => ({
+          id: c.identifier,
+          name: `chan${idx + 1}`,
+          isPrivate: false,
+          isMember: true,
+          isArchived: false,
+        }))
+        this.logVerbose(output, 'Bypassing Slack auth & resolution (test mode)')
       }
 
-      this.logVerbose(
-        output,
-        `Authentication successful - Bot ID: ${authTest.botId}`
-      )
+      // Test authentication
+      if (!testBypass) {
+        this.logVerbose(output, 'Validating Slack authentication...')
+        const authTest = await this.slackService.testAuthentication()
+        if (!authTest.valid) {
+          const error = new Error(
+            `Authentication failed: ${authTest.error || 'Unknown error'}`
+          )
+          return this.createFailureResult(error, 2, output)
+        }
+        this.logVerbose(
+          output,
+          `Authentication successful - Bot ID: ${authTest.botId}`
+        )
+      }
 
       // Determine message input (file or inline). For broadcast, options.message is required by validation today; extend to support messageFile when CLI adds it
-      const messageContent = effectiveOptions.message
+      let messageContent = effectiveOptions.message
       if (messageFile) {
         this.logVerbose(
           output,
@@ -185,15 +208,16 @@ export class BroadcastMessageCommand {
       }
 
       // Resolve channels
-      this.logVerbose(output, 'Resolving channel identifiers...')
-      let resolvedChannels: ResolvedChannel[]
-      try {
-        resolvedChannels = await this.slackService.resolveChannels(
-          targetList.channels
-        )
-      } catch (error) {
-        const err = error instanceof Error ? error : new Error(String(error))
-        return this.createFailureResult(err, 4, output)
+      if (!resolvedChannels) {
+        this.logVerbose(output, 'Resolving channel identifiers...')
+        try {
+          resolvedChannels = await this.slackService.resolveChannels(
+            targetList.channels
+          )
+        } catch (error) {
+          const err = error instanceof Error ? error : new Error(String(error))
+          return this.createFailureResult(err, 4, output)
+        }
       }
 
       this.logVerbose(
@@ -206,9 +230,50 @@ export class BroadcastMessageCommand {
         return this.createFailureResult(error, 4, output)
       }
 
+      // Apply mention resolution before dry run or broadcast
+      let mentionSummaryLines: string[] | null = null
+      if (typeof messageContent === 'string' && messageContent.includes('@')) {
+        try {
+          const resolution = applyMentions(
+            messageContent,
+            configuration.mentions || {}
+          )
+          messageContent = resolution.text
+          mentionSummaryLines = formatResolutionSummary(resolution.summary)
+          if (resolution.summary.hadPlaceholders) {
+            this.logging.debug('mention-resolution summary', {
+              replacements: resolution.summary.replacements,
+              total: resolution.summary.totalReplacements,
+              unresolved: resolution.summary.unresolved,
+            })
+          }
+        } catch (e) {
+          // Non-fatal: leave messageContent unchanged on failure
+          this.logVerbose(
+            output,
+            `Mention resolution error (ignored): ${e instanceof Error ? e.message : String(e)}`
+          )
+        }
+      }
+
       // Handle dry run
       if (options.dryRun) {
         this.logVerbose(output, 'Performing dry run simulation...')
+        if (this.verboseLogging) {
+          // Show the exact (post-mention-resolution) message that would be sent
+          const len =
+            typeof messageContent === 'string' ? messageContent.length : 0
+          // Escape newlines for single-line verbose log clarity
+          const oneLine = (messageContent || '')
+            .replace(/\r/g, '')
+            .split('\n')
+            .map(l => l.trimEnd())
+            .join(' \n ')
+          this.logVerbose(
+            output,
+            `Dry-run message body (length: ${len}): ${oneLine}`
+          )
+        }
         const dryRunResult = await this.dryRunService.simulateBroadcast(
           resolvedChannels,
           messageContent,
@@ -218,6 +283,12 @@ export class BroadcastMessageCommand {
         // Generate and display dry run preview
         const preview = this.dryRunService.generateDryRunPreview(dryRunResult)
         output.push(preview)
+
+        // Append mention summary lines (if any)
+        if (mentionSummaryLines) {
+          output.push('')
+          for (const line of mentionSummaryLines) output.push(line)
+        }
 
         return {
           success: true,
@@ -249,6 +320,12 @@ export class BroadcastMessageCommand {
       // Determine success and exit code
       const success = broadcastResult.overallStatus === 'success'
       const exitCode = this.getExitCodeForBroadcastResult(broadcastResult)
+
+      // Append mention summary lines after core broadcast output
+      if (mentionSummaryLines) {
+        output.push('')
+        for (const line of mentionSummaryLines) output.push(line)
+      }
 
       return {
         success,

@@ -1,4 +1,5 @@
 import type { NamedChannelList } from './named-channel-list'
+import type { MentionMapping } from './mention-mapping'
 
 /**
  * Configuration structure representing the complete YAML configuration file
@@ -6,6 +7,9 @@ import type { NamedChannelList } from './named-channel-list'
 export interface ChannelConfiguration {
   /** Array of named channel lists */
   channelLists: NamedChannelList[]
+
+  /** Optional global mentions mapping */
+  mentions?: MentionMapping | undefined
 
   /** Path to the configuration file */
   filePath: string

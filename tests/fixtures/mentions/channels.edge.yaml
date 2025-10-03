@@ -1,0 +1,9 @@
+mentions:
+  team-lead:
+    id: S222TEAM
+    type: team
+
+channel_lists:
+  - name: edge
+    channels:
+      - C1234567890

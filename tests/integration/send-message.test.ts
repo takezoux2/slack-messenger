@@ -1,5 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { spawn } from 'child_process'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+const cliEntry = path.resolve(__dirname, '../../scripts/start.cjs')
 
 /**
  * Integration Test: Basic Message Sending
@@ -17,11 +23,10 @@ describe('Integration: Basic Message Sending', () => {
     exitCode: number
   }> => {
     return new Promise(resolve => {
-      const child = spawn('yarn', ['start', ...args], {
+      const child = spawn(process.execPath, [cliEntry, ...args], {
         env: { ...process.env, ...env },
         stdio: 'pipe',
-        shell: true,
-        timeout: 10000, // 10 second timeout
+        cwd: path.resolve(__dirname, '../../'),
       })
 
       let stdout = ''
@@ -99,6 +104,9 @@ describe('Integration: Basic Message Sending', () => {
           env[key] = process.env[key]!
         }
       })
+
+      // Explicitly blank out SLACK_BOT_TOKEN so dotenv does not restore it
+      env['SLACK_BOT_TOKEN'] = ''
 
       const { exitCode, stderr } = await execCommand(
         ['send-message', 'C1234567890', 'Test message'],

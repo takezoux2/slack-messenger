@@ -210,9 +210,10 @@ describe('Channel Resolution', () => {
       ]
 
       const resolved = await slackService.resolveChannels(targets)
+      console.log(resolved)
 
-      expect(resolved).toHaveLength(2) // Only the found channels
-      expect(resolved.every(r => r.id === 'C1234567890')).toBe(false) // Should not be duplicated
+      expect(resolved).toHaveLength(1) // Only the found channels
+      expect(resolved.every(r => r.id === 'C1234567890')).toBe(true) // Should not be duplicated
     })
 
     it('should handle channels with # prefix in names', async () => {

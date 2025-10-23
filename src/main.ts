@@ -255,6 +255,10 @@ async function executeBroadcastCommand(
       messageFile: options.messageFile
         ? options.messageFile.toString()
         : undefined,
+      senderName: options.senderName,
+      senderIconEmoji: options.senderIconEmoji,
+      senderIconUrl: options.senderIconUrl,
+      allowDefaultIdentity: options.allowDefaultIdentity,
     }
     if (options.token) {
       broadcastOptions.token = options.token.toString()

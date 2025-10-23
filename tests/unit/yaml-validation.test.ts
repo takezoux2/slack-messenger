@@ -36,6 +36,8 @@ describe('YAML Configuration Validation', () => {
         expect(developmentList).toBeDefined()
         expect(developmentList!.channels).toHaveLength(3)
         expect(config.filePath).toBe('./test-config.yml')
+        expect(config.senderIdentity?.name).toBe('QA Notifier')
+        expect(config.senderIdentity?.iconEmoji).toBe(':loudspeaker:')
       })
 
       it('should throw error for invalid YAML syntax', async () => {

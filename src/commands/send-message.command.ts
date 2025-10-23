@@ -14,6 +14,10 @@ import { MessageDeliveryResult } from '../models/message-delivery-result.js'
 import { AuthenticationCredentials } from '../models/authentication-credentials.js'
 import { FileMessageLoaderService } from '../services/file-message-loader.service.js'
 import { MessageInput } from '../models/message-input.js'
+import { AppConfig } from '../config/app-config.js'
+import type { ChannelConfiguration } from '../models/channel-configuration'
+import { SenderIdentity } from '../models/sender-identity.js'
+import type { ResolvedSenderIdentity } from '../models/sender-identity'
 
 export interface SendMessageCommandConfig {
   slackService?: SlackService
@@ -128,6 +132,24 @@ export class SendMessageCommand {
 
       // Models are validated during construction, so if we reach here they are valid
 
+      let senderIdentity: ResolvedSenderIdentity | undefined
+      try {
+        const identityResolution = await this.resolveSenderIdentity(options, output)
+        senderIdentity = identityResolution.identity
+        for (const warning of identityResolution.warnings) {
+          output.push(`⚠️ ${warning}`)
+        }
+        if (identityResolution.requiresAllowDefaultIdentity) {
+          const errorMessage =
+            identityResolution.allowDefaultIdentityErrorMessage ||
+            'Sender identity not configured. Use --allow-default-identity to send with the default Slack identity.'
+          return this.createFailureResult(new Error(errorMessage), 1, output)
+        }
+      } catch (error) {
+        const err = error instanceof Error ? error : new Error(String(error))
+        return this.createFailureResult(err, 3, output)
+      }
+
       // Load credentials with CLI override and test authentication first
       this.logVerbose(output, 'Loading authentication credentials...')
       try {
@@ -202,7 +224,11 @@ export class SendMessageCommand {
 
       // Send the message
       this.logVerbose(output, 'Sending message to Slack API...')
-      const deliveryResult = await slack.sendMessage(message, target)
+      const deliveryResult = await slack.sendMessage(
+        message,
+        target,
+        senderIdentity
+      )
 
       // Handle result
       if (deliveryResult.success) {
@@ -274,6 +300,123 @@ export class SendMessageCommand {
   private logVerbose(output: string[], message: string): void {
     if (this.verboseLogging) {
       output.push(`[INFO] ${message}`)
+    }
+  }
+
+  private async resolveSenderIdentity(
+    options: CommandLineOptions,
+    output: string[]
+  ): Promise<{
+    identity?: ResolvedSenderIdentity
+    warnings: string[]
+    requiresAllowDefaultIdentity: boolean
+    allowDefaultIdentityErrorMessage?: string
+  }> {
+    const warnings: string[] = []
+    let configIdentity: ChannelConfiguration['senderIdentity']
+    let configSource: string | undefined
+
+    const overridesProvided =
+      options.senderName !== undefined ||
+      options.senderIconEmoji !== undefined ||
+      options.senderIconUrl !== undefined
+
+    const configPath = options.configPath
+    if (configPath) {
+      this.logVerbose(output, `Loading configuration for sender identity: ${configPath}`)
+      const result = await AppConfig.loadChannelConfiguration(configPath)
+      if (!result.success || !result.configuration) {
+        throw new Error(result.error || 'Failed to load configuration')
+      }
+      configIdentity = result.configuration.senderIdentity
+      configSource = result.resolvedPath || configPath
+    } else {
+      const defaultPath = AppConfig.findDefaultConfigFile()
+      if (defaultPath) {
+        this.logVerbose(
+          output,
+          `Attempting to load sender identity from default configuration: ${defaultPath}`
+        )
+        const result = await AppConfig.loadChannelConfiguration(defaultPath)
+        if (result.success && result.configuration) {
+          configIdentity = result.configuration.senderIdentity
+          configSource = result.resolvedPath || defaultPath
+        } else if (result.error) {
+          warnings.push(
+            `Unable to load sender identity from ${defaultPath}: ${result.error}`
+          )
+        }
+      }
+    }
+
+    const allowDefaultFromConfig =
+      configIdentity?.allowDefaultIdentity === true
+
+    const resolution = SenderIdentity.resolve(configIdentity, {
+      name: options.senderName,
+      iconEmoji: options.senderIconEmoji,
+      iconUrl: options.senderIconUrl,
+    })
+
+    warnings.push(...resolution.warnings)
+
+    let identity = resolution.identity
+    if (identity && !SenderIdentity.isComplete(identity)) {
+      warnings.push(
+        `${
+          resolution.sourceDescription || 'Sender identity'
+        } is missing a name or icon. Using default Slack identity.`
+      )
+      identity = undefined
+    }
+
+    if (!identity && overridesProvided) {
+      warnings.push(
+        'Sender identity overrides require --sender-name and either --sender-icon-emoji or --sender-icon-url.'
+      )
+    }
+
+    const allowDefaultIdentityEnabled =
+      options.allowDefaultIdentity || allowDefaultFromConfig
+
+    let requiresAllowDefaultIdentity = false
+    let allowDefaultIdentityErrorMessage: string | undefined
+
+    if (!identity) {
+      if (!allowDefaultIdentityEnabled) {
+        const message = configSource
+          ? `Sender identity not configured in ${configSource}. Use --allow-default-identity to send with the default Slack identity.`
+          : 'Sender identity not configured. Use --allow-default-identity to send with the default Slack identity.'
+        warnings.push(message)
+        requiresAllowDefaultIdentity = true
+        allowDefaultIdentityErrorMessage = message
+      } else if (allowDefaultFromConfig && !options.allowDefaultIdentity) {
+        warnings.push(
+          `Sender identity is not configured, but ${configSource || 'the configuration'} allows using the default Slack identity.`
+        )
+      }
+    }
+
+    if (identity) {
+      const icon = identity.iconEmoji || identity.iconUrl || 'default'
+      this.logVerbose(
+        output,
+        `Sender identity resolved from ${
+          resolution.sourceDescription || 'configuration'
+        }: name="${identity.name}" icon=${icon}`
+      )
+    } else if (configSource) {
+      this.logVerbose(
+        output,
+        `Using default Slack identity for message (no sender identity resolved from ${configSource}).`
+      )
+    }
+
+    return {
+      identity,
+      warnings,
+      requiresAllowDefaultIdentity,
+      allowDefaultIdentityErrorMessage,
     }
   }
 

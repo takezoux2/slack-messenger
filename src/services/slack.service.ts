@@ -5,7 +5,12 @@
  * authentication, rate limiting, and error handling.
  */
 
-import { WebClient, ChatPostMessageResponse, LogLevel } from '@slack/web-api'
+import {
+  WebClient,
+  ChatPostMessageResponse,
+  ChatPostMessageArguments,
+  LogLevel,
+} from '@slack/web-api'
 import { SlackMessage } from '../models/slack-message.js'
 import { ChannelTarget } from '../models/channel-target.js'
 import { AuthenticationCredentials } from '../models/authentication-credentials.js'
@@ -14,6 +19,7 @@ import type { ResolvedChannel } from '../models/resolved-channel'
 import type { BroadcastResult } from '../models/broadcast-result'
 import type { ChannelDeliveryResult } from '../models/channel-delivery-result'
 import type { BroadcastOptions } from '../models/broadcast-options'
+import type { ResolvedSenderIdentity } from '../models/sender-identity'
 
 export interface SlackServiceConfig {
   credentials: AuthenticationCredentials
@@ -47,7 +53,8 @@ export class SlackService {
    */
   async sendMessage(
     message: SlackMessage,
-    target: ChannelTarget
+    target: ChannelTarget,
+    identity?: ResolvedSenderIdentity
   ): Promise<MessageDeliveryResult> {
     const startTime = Date.now()
     const retryCount = 0
@@ -59,7 +66,11 @@ export class SlackService {
       }
 
       // Prepare the API call
-      const response = await this.performSendMessage(message, target)
+      const response = await this.performSendMessage(
+        message,
+        target,
+        identity
+      )
       const deliveryTime = Date.now() - startTime
 
       // Process successful response
@@ -75,6 +86,16 @@ export class SlackService {
             messageLength: message.contentLength,
             hasMarkdown: message.hasMarkdownFormatting,
             isMultiLine: message.isMultiLine,
+            ...(identity
+              ? {
+                  senderIdentity: {
+                    source: identity.source,
+                    name: identity.name,
+                    iconEmoji: identity.iconEmoji,
+                    iconUrl: identity.iconUrl,
+                  },
+                }
+              : {}),
           },
         })
       } else {
@@ -84,7 +105,8 @@ export class SlackService {
           error,
           target.identifier,
           Date.now() - startTime,
-          retryCount
+          retryCount,
+          identity
         )
       }
     } catch (error) {
@@ -93,7 +115,8 @@ export class SlackService {
         error instanceof Error ? error : new Error(String(error)),
         target.identifier,
         deliveryTime,
-        retryCount
+        retryCount,
+        identity
       )
     }
   }
@@ -172,14 +195,30 @@ export class SlackService {
    */
   private async performSendMessage(
     message: SlackMessage,
-    target: ChannelTarget
+    target: ChannelTarget,
+    identity?: ResolvedSenderIdentity
   ): Promise<ChatPostMessageResponse> {
-    return await this.client.chat.postMessage({
+    const payload: ChatPostMessageArguments = {
       channel: target.identifier,
       text: message.getFormattedContent(),
       unfurl_links: false,
       unfurl_media: false,
-    })
+    }
+
+    if (identity && identity.name) {
+      payload['username'] = identity.name
+      payload['as_user'] = false
+      if (identity.iconEmoji) {
+        payload['icon_emoji'] = identity.iconEmoji
+      }
+      if (identity.iconUrl) {
+        payload['icon_url'] = identity.iconUrl
+      }
+    } else {
+      payload['as_user'] = true
+    }
+
+    return await this.client.chat.postMessage(payload)
   }
 
   /**
@@ -189,11 +228,21 @@ export class SlackService {
     error: Error,
     channelId: string,
     deliveryTimeMs: number,
-    retryCount: number
+    retryCount: number,
+    identity?: ResolvedSenderIdentity
   ): MessageDeliveryResult {
-    const metadata = {
+    const metadata: Record<string, unknown> = {
       originalError: error.name,
       deliveryAttempts: retryCount + 1,
+    }
+
+    if (identity) {
+      metadata['senderIdentity'] = {
+        source: identity.source,
+        name: identity.name,
+        iconEmoji: identity.iconEmoji,
+        iconUrl: identity.iconUrl,
+      }
     }
 
     // Determine error type and create appropriate result
@@ -432,7 +481,8 @@ export class SlackService {
   async broadcastMessage(
     channels: ResolvedChannel[],
     message: string,
-    options?: Partial<BroadcastOptions>
+    options?: Partial<BroadcastOptions>,
+    identity?: ResolvedSenderIdentity
   ): Promise<BroadcastResult> {
     const deliveryResults: ChannelDeliveryResult[] = []
 
@@ -465,11 +515,27 @@ export class SlackService {
         }
 
         // Send message
-        const response = await this.client.chat.postMessage({
+        const payload: ChatPostMessageArguments = {
           channel: channel.id,
           text: message,
-          as_user: true,
-        })
+          unfurl_links: false,
+          unfurl_media: false,
+        }
+
+        if (identity && identity.name) {
+          payload.username = identity.name
+          payload.as_user = false
+          if (identity.iconEmoji) {
+            payload.icon_emoji = identity.iconEmoji
+          }
+          if (identity.iconUrl) {
+            payload.icon_url = identity.iconUrl
+          }
+        } else {
+          payload.as_user = true
+        }
+
+        const response = await this.client.chat.postMessage(payload)
 
         if (response.ok && response.ts) {
           deliveryResults.push({

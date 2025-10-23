@@ -19,6 +19,18 @@ export interface BroadcastOptions {
 
   /** Slack API token override */
   token?: string
+
+  /** Optional sender name override */
+  senderName?: string
+
+  /** Optional sender icon emoji override */
+  senderIconEmoji?: string
+
+  /** Optional sender icon URL override */
+  senderIconUrl?: string
+
+  /** Allow default identity usage when configuration lacks sender identity */
+  allowDefaultIdentity?: boolean
 }
 
 /**

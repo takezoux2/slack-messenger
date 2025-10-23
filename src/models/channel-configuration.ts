@@ -1,5 +1,6 @@
 import type { NamedChannelList } from './named-channel-list'
 import type { MentionMapping } from './mention-mapping'
+import type { SenderIdentityConfig } from './sender-identity'
 
 /**
  * Configuration structure representing the complete YAML configuration file
@@ -10,6 +11,9 @@ export interface ChannelConfiguration {
 
   /** Optional global mentions mapping */
   mentions?: MentionMapping | undefined
+
+  /** Optional sender identity configuration */
+  senderIdentity?: SenderIdentityConfig | undefined
 
   /** Path to the configuration file */
   filePath: string

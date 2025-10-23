@@ -1,3 +1,7 @@
+sender_identity:
+  name: 'QA Notifier'
+  icon_emoji: ':loudspeaker:'
+
 channel_lists:
   - name: 'development'
     description: 'Channels for development team'

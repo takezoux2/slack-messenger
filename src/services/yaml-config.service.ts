@@ -4,6 +4,7 @@ import type { ChannelConfiguration } from '../models/channel-configuration'
 import type { MentionMapping } from '../models/mention-mapping'
 import type { NamedChannelList } from '../models/named-channel-list'
 import type { ChannelTarget } from '../models/channel-target'
+import type { SenderIdentityConfig } from '../models/sender-identity'
 
 /**
  * Service for loading and parsing YAML configuration files
@@ -159,11 +160,17 @@ export class YamlConfigService {
         }
       }
 
+      // Parse optional sender identity configuration
+      const senderIdentity =
+        YamlConfigService.parseSenderIdentity(parsedYaml.sender_identity) ||
+        YamlConfigService.parseSenderIdentity(parsedYaml.senderIdentity)
+
       const configuration: ChannelConfiguration = {
         channelLists,
         mentions,
         filePath,
         lastModified,
+        senderIdentity,
       }
 
       // Cache the configuration
@@ -347,5 +354,48 @@ export class YamlConfigService {
     }
 
     return Array.from(uniqueChannels.values())
+  }
+
+  private static parseSenderIdentity(
+    rawIdentity: unknown
+  ): SenderIdentityConfig | undefined {
+    if (!rawIdentity || typeof rawIdentity !== 'object') {
+      return undefined
+    }
+
+    const identity = rawIdentity as Record<string, unknown>
+    const name = YamlConfigService.normalizeString(identity['name'])
+    let iconEmoji = YamlConfigService.normalizeString(identity['icon_emoji'])
+    const iconUrl = YamlConfigService.normalizeString(identity['icon_url'])
+    const legacyIcon = YamlConfigService.normalizeString(identity['icon'])
+
+    if (!iconEmoji && legacyIcon && /^:[^:\s]+:$/.test(legacyIcon)) {
+      iconEmoji = legacyIcon
+    }
+
+    const allowDefaultIdentity =
+      identity['allow_default_identity'] === true ? true : undefined
+
+    if (!name && !iconEmoji && !iconUrl && allowDefaultIdentity === undefined) {
+      return undefined
+    }
+
+    const senderIdentity: SenderIdentityConfig = {}
+    if (name) senderIdentity.name = name
+    if (iconEmoji) senderIdentity.iconEmoji = iconEmoji
+    if (iconUrl) senderIdentity.iconUrl = iconUrl
+    if (allowDefaultIdentity !== undefined) {
+      senderIdentity.allowDefaultIdentity = allowDefaultIdentity
+    }
+
+    return senderIdentity
+  }
+
+  private static normalizeString(value: unknown): string | undefined {
+    if (typeof value !== 'string') {
+      return undefined
+    }
+    const trimmed = value.trim()
+    return trimmed.length > 0 ? trimmed : undefined
   }
 }

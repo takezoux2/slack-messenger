@@ -35,6 +35,10 @@ export interface ParsedCliArgs {
   logLevel?: string | undefined
   timeout?: number | undefined
   retries?: number | undefined
+  senderName?: string | undefined
+  senderIconEmoji?: string | undefined
+  senderIconUrl?: string | undefined
+  allowDefaultIdentity?: boolean | undefined
   // Broadcast command options
   configPath?: string | undefined
   channelList?: string | undefined
@@ -106,6 +110,21 @@ export class CliService {
         )
         .option('--timeout <ms>', 'Timeout in milliseconds', '10000')
         .option('--retries <count>', 'Number of retry attempts', '3')
+        .option('-c, --config <path>', 'Path to YAML configuration file for sender identity')
+        .option('--sender-name <name>', 'Override sender display name')
+        .option(
+          '--sender-icon-emoji <emoji>',
+          'Override sender icon emoji (e.g., :rocket:)'
+        )
+        .option(
+          '--sender-icon-url <url>',
+          'Override sender icon URL (https://...)'
+        )
+        .option(
+          '--allow-default-identity',
+          'Allow using the default Slack identity when configuration lacks sender identity',
+          false
+        )
         .action((channelId, messageParts, options) => {
           executedCommand = 'send-message'
           const joined = Array.isArray(messageParts)
@@ -154,6 +173,20 @@ export class CliService {
         .option(
           '--dry-run',
           'Show what would be sent without actually sending',
+          false
+        )
+        .option('--sender-name <name>', 'Override sender display name for this run')
+        .option(
+          '--sender-icon-emoji <emoji>',
+          'Override sender icon emoji (e.g., :rocket:)' 
+        )
+        .option(
+          '--sender-icon-url <url>',
+          'Override sender icon URL (https://...)'
+        )
+        .option(
+          '--allow-default-identity',
+          'Allow using the default Slack identity when configuration lacks sender identity',
           false
         )
         .action((channelList, messageParts, options) => {
@@ -312,6 +345,15 @@ export class CliService {
           : globalOptions['retries']
             ? parseInt(globalOptions['retries'] as string, 10)
             : undefined,
+        senderName: (commandOptions['senderName'] || globalOptions['senderName']) as
+          | string
+          | undefined,
+        senderIconEmoji: (commandOptions['senderIconEmoji'] ||
+          globalOptions['senderIconEmoji']) as string | undefined,
+        senderIconUrl: (commandOptions['senderIconUrl'] ||
+          globalOptions['senderIconUrl']) as string | undefined,
+        allowDefaultIdentity: (commandOptions['allowDefaultIdentity'] ??
+          globalOptions['allowDefaultIdentity']) as boolean | undefined,
         // Broadcast command options
         configPath: (commandOptions['config'] || globalOptions['config']) as
           | string
@@ -357,6 +399,10 @@ export class CliService {
         logLevel: parsedArgs.logLevel || undefined,
         timeout: parsedArgs.timeout || undefined,
         retries: parsedArgs.retries || undefined,
+        senderName: parsedArgs.senderName || undefined,
+        senderIconEmoji: parsedArgs.senderIconEmoji || undefined,
+        senderIconUrl: parsedArgs.senderIconUrl || undefined,
+        allowDefaultIdentity: parsedArgs.allowDefaultIdentity || undefined,
         // Broadcast options
         configPath: parsedArgs.configPath || undefined,
         channelList: parsedArgs.channelList || undefined,

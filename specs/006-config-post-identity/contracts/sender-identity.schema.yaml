@@ -1,0 +1,48 @@
+# Sender Identity Configuration Schema (informational)
+$schema: "https://json-schema.org/draft/2020-12/schema"
+title: Slack Messenger Sender Identity
+description: Configuration block that drives the CLI display name and icon when posting to Slack.
+type: object
+required:
+  - sender_identity
+properties:
+  sender_identity:
+    type: object
+    required:
+      - name
+    properties:
+      name:
+        type: string
+        minLength: 1
+        description: Display name to present in Slack messages.
+      icon_emoji:
+        type: string
+        pattern: ^:[a-z0-9_+-]+:$
+        description: Slack emoji shortcode (e.g., :bell:).
+      icon_url:
+        type: string
+        format: uri
+        description: HTTPS URL to an icon image sized per Slack guidance (72x72 recommended).
+      icon:
+        type: string
+        description: Legacy shorthand; treated as icon_emoji when it matches shortcode format.
+    allOf:
+      - if:
+          properties:
+            icon_emoji:
+              type: string
+        then:
+          not:
+            required:
+              - icon_url
+        else:
+          if:
+            properties:
+              icon_url:
+                type: string
+            then:
+              not:
+                required:
+                  - icon_emoji
+    additionalProperties: false
+additionalProperties: true

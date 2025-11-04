@@ -252,13 +252,19 @@ async function executeBroadcastCommand(
       message: (options.message || '').toString(),
       dryRun: !!options.dryRun,
       verbose: !!options.verbose,
-      messageFile: options.messageFile
-        ? options.messageFile.toString()
-        : undefined,
-      senderName: options.senderName,
-      senderIconEmoji: options.senderIconEmoji,
-      senderIconUrl: options.senderIconUrl,
-      allowDefaultIdentity: options.allowDefaultIdentity,
+      allowDefaultIdentity: !!options.allowDefaultIdentity,
+    }
+    if (options.messageFile) {
+      broadcastOptions.messageFile = options.messageFile.toString()
+    }
+    if (options.senderName !== undefined) {
+      broadcastOptions.senderName = options.senderName
+    }
+    if (options.senderIconEmoji !== undefined) {
+      broadcastOptions.senderIconEmoji = options.senderIconEmoji
+    }
+    if (options.senderIconUrl !== undefined) {
+      broadcastOptions.senderIconUrl = options.senderIconUrl
     }
     if (options.token) {
       broadcastOptions.token = options.token.toString()

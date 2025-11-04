@@ -134,7 +134,10 @@ export class SendMessageCommand {
 
       let senderIdentity: ResolvedSenderIdentity | undefined
       try {
-        const identityResolution = await this.resolveSenderIdentity(options, output)
+        const identityResolution = await this.resolveSenderIdentity(
+          options,
+          output
+        )
         senderIdentity = identityResolution.identity
         for (const warning of identityResolution.warnings) {
           output.push(`⚠️ ${warning}`)
@@ -323,7 +326,10 @@ export class SendMessageCommand {
 
     const configPath = options.configPath
     if (configPath) {
-      this.logVerbose(output, `Loading configuration for sender identity: ${configPath}`)
+      this.logVerbose(
+        output,
+        `Loading configuration for sender identity: ${configPath}`
+      )
       const result = await AppConfig.loadChannelConfiguration(configPath)
       if (!result.success || !result.configuration) {
         throw new Error(result.error || 'Failed to load configuration')
@@ -349,8 +355,7 @@ export class SendMessageCommand {
       }
     }
 
-    const allowDefaultFromConfig =
-      configIdentity?.allowDefaultIdentity === true
+    const allowDefaultFromConfig = configIdentity?.allowDefaultIdentity === true
 
     const resolution = SenderIdentity.resolve(configIdentity, {
       name: options.senderName,
@@ -413,10 +418,12 @@ export class SendMessageCommand {
     }
 
     return {
-      identity,
+      ...(identity ? { identity } : {}),
       warnings,
       requiresAllowDefaultIdentity,
-      allowDefaultIdentityErrorMessage,
+      ...(allowDefaultIdentityErrorMessage
+        ? { allowDefaultIdentityErrorMessage }
+        : {}),
     }
   }
 
@@ -447,13 +454,18 @@ export class SendMessageCommand {
     switch (errorType) {
       case 'authentication':
         return 2
+      case 'ValidationError':
+      case 'InvalidArgumentsError':
+      case 'validation':
+        return 1
       case 'channel':
         return 3
       case 'network':
         return 4
-      case 'validation':
-        return 1
       default:
+        if (errorType && /invalid_arguments/i.test(errorType)) {
+          return 1
+        }
         return 5
     }
   }

@@ -395,6 +395,23 @@ export class BroadcastMessageCommand {
       } else if (delivery.status === 'failed') {
         const reason = delivery.error?.message || 'Unknown error'
         output.push(`✗ #${delivery.channel.name}: Failed - ${reason}`)
+        const guidance =
+          typeof delivery.error?.details?.guidance === 'string'
+            ? delivery.error.details.guidance
+            : undefined
+        if (guidance) {
+          output.push(`    ↳ ${guidance}`)
+        }
+        const slackMessages = Array.isArray(
+          delivery.error?.details?.slackMessages
+        )
+          ? delivery.error?.details?.slackMessages
+          : undefined
+        if (slackMessages && slackMessages.length > 0) {
+          for (const message of slackMessages) {
+            output.push(`    • ${message}`)
+          }
+        }
       } else if (delivery.status === 'skipped') {
         const reason = delivery.error?.message || 'Access denied'
         output.push(`⚠ #${delivery.channel.name}: Skipped - ${reason}`)
@@ -412,6 +429,10 @@ export class BroadcastMessageCommand {
     ).length
     const skipCount = result.deliveryResults.filter(
       r => r.status === 'skipped'
+    ).length
+
+    const failedValidationCount = result.deliveryResults.filter(
+      r => r.status === 'failed' && this.isValidationFailureType(r.error?.type)
     ).length
 
     if (result.overallStatus === 'success') {
@@ -444,6 +465,12 @@ export class BroadcastMessageCommand {
       }
     }
 
+    if (failedValidationCount > 0) {
+      output.push(
+        `Validation issues detected in ${failedValidationCount} channel${failedValidationCount === 1 ? '' : 's'} — adjust the message content or channel targets and retry.`
+      )
+    }
+
     if (verbose) {
       output.push('')
       output.push(
@@ -456,12 +483,29 @@ export class BroadcastMessageCommand {
    * Get exit code based on broadcast result
    */
   private getExitCodeForBroadcastResult(result: BroadcastResult): number {
+    const failedDeliveries = result.deliveryResults.filter(
+      r => r.status === 'failed'
+    )
+    const hasValidationFailure = failedDeliveries.some(delivery =>
+      this.isValidationFailureType(delivery.error?.type)
+    )
+    const hasNonValidationFailure = failedDeliveries.some(
+      delivery =>
+        delivery.error && !this.isValidationFailureType(delivery.error.type)
+    )
+
     switch (result.overallStatus) {
       case 'success':
         return 0
       case 'partial':
+        if (hasValidationFailure && !hasNonValidationFailure) {
+          return 1
+        }
         return 1
       case 'failed':
+        if (hasValidationFailure && !hasNonValidationFailure) {
+          return 1
+        }
         return 2
       default:
         return 5
@@ -614,8 +658,7 @@ export class BroadcastMessageCommand {
       )
     }
 
-    const allowDefaultFromConfig =
-      configIdentity?.allowDefaultIdentity === true
+    const allowDefaultFromConfig = configIdentity?.allowDefaultIdentity === true
     const allowDefaultIdentityEnabled =
       options.allowDefaultIdentity || allowDefaultFromConfig
 
@@ -646,10 +689,20 @@ export class BroadcastMessageCommand {
     }
 
     return {
-      identity,
+      ...(identity ? { identity } : {}),
       warnings,
       requiresAllowDefaultIdentity,
-      allowDefaultIdentityErrorMessage,
+      ...(allowDefaultIdentityErrorMessage
+        ? { allowDefaultIdentityErrorMessage }
+        : {}),
     }
+  }
+
+  private isValidationFailureType(type?: string | null): boolean {
+    if (!type) {
+      return false
+    }
+
+    return /invalid_arguments|validation/i.test(type)
   }
 }

@@ -72,13 +72,13 @@ export class SenderIdentity {
       if (trimmedOverrides.iconEmoji !== undefined) {
         merged.iconEmoji = trimmedOverrides.iconEmoji
         if (trimmedOverrides.iconEmoji) {
-          merged.iconUrl = undefined
+          delete merged.iconUrl
         }
       }
       if (trimmedOverrides.iconUrl !== undefined) {
         merged.iconUrl = trimmedOverrides.iconUrl
         if (trimmedOverrides.iconUrl) {
-          merged.iconEmoji = undefined
+          delete merged.iconEmoji
         }
       }
       if (
@@ -101,13 +101,15 @@ export class SenderIdentity {
       source = 'config'
     }
 
+    const identityPayload: ResolvedSenderIdentity = {
+      source,
+      ...(merged.name ? { name: merged.name } : {}),
+      ...(merged.iconEmoji ? { iconEmoji: merged.iconEmoji } : {}),
+      ...(merged.iconUrl ? { iconUrl: merged.iconUrl } : {}),
+    }
+
     return {
-      identity: {
-        name: merged.name,
-        iconEmoji: merged.iconEmoji,
-        iconUrl: merged.iconUrl,
-        source,
-      },
+      identity: identityPayload,
       warnings,
       sourceDescription: source === 'cli' ? 'CLI overrides' : 'configuration',
     }
@@ -149,13 +151,13 @@ export class SenderIdentity {
     const iconUrl = SenderIdentity.normalizeString(overrides.iconUrl)
 
     const result: SenderIdentityOverrides = {}
-    if (overrides.name !== undefined) {
+    if (name !== undefined) {
       result.name = name
     }
-    if (overrides.iconEmoji !== undefined) {
+    if (iconEmoji !== undefined) {
       result.iconEmoji = iconEmoji
     }
-    if (overrides.iconUrl !== undefined) {
+    if (iconUrl !== undefined) {
       result.iconUrl = iconUrl
     }
 

@@ -22,6 +22,8 @@ import {
 } from '../services/mention-resolution.service.js'
 import { FileMessageLoaderService } from '../services/file-message-loader.service.js'
 import { LoggingService } from '../services/logging.service.js'
+import { SenderIdentity } from '../models/sender-identity.js'
+import type { ResolvedSenderIdentity } from '../models/sender-identity'
 
 export interface BroadcastCommandConfig {
   slackService?: SlackService
@@ -74,6 +76,7 @@ export class BroadcastMessageCommand {
 
     try {
       this.logVerbose(output, 'Starting broadcast command...')
+      let senderIdentity: ResolvedSenderIdentity | undefined
 
       // Support message file input by loading it before validation (so validation sees inline message)
       // @ts-ignore messageFile may be passed via CLI parsing though not in interface
@@ -160,6 +163,22 @@ export class BroadcastMessageCommand {
         output,
         `Found channel list "${options.listName}" with ${targetList.channels.length} channels`
       )
+
+      const identityResolution = this.resolveSenderIdentity(
+        configuration,
+        options,
+        output
+      )
+      senderIdentity = identityResolution.identity
+      for (const warning of identityResolution.warnings) {
+        output.push(`⚠️ ${warning}`)
+      }
+      if (identityResolution.requiresAllowDefaultIdentity) {
+        const errorMessage =
+          identityResolution.allowDefaultIdentityErrorMessage ||
+          `Sender identity not configured in ${configuration.filePath}. Use --allow-default-identity to proceed with the default Slack identity.`
+        return this.createFailureResult(new Error(errorMessage), 1, output)
+      }
 
       // Test bypass for integration tests (no real Slack): if dry-run and env flag set, fabricate resolved channels
       const testBypass =
@@ -311,7 +330,8 @@ export class BroadcastMessageCommand {
       const broadcastResult = await this.slackService.broadcastMessage(
         resolvedChannels,
         messageContent,
-        { listName: options.listName }
+        { listName: options.listName },
+        senderIdentity
       )
 
       // Generate output based on results
@@ -375,6 +395,23 @@ export class BroadcastMessageCommand {
       } else if (delivery.status === 'failed') {
         const reason = delivery.error?.message || 'Unknown error'
         output.push(`✗ #${delivery.channel.name}: Failed - ${reason}`)
+        const guidance =
+          typeof delivery.error?.details?.guidance === 'string'
+            ? delivery.error.details.guidance
+            : undefined
+        if (guidance) {
+          output.push(`    ↳ ${guidance}`)
+        }
+        const slackMessages = Array.isArray(
+          delivery.error?.details?.slackMessages
+        )
+          ? delivery.error?.details?.slackMessages
+          : undefined
+        if (slackMessages && slackMessages.length > 0) {
+          for (const message of slackMessages) {
+            output.push(`    • ${message}`)
+          }
+        }
       } else if (delivery.status === 'skipped') {
         const reason = delivery.error?.message || 'Access denied'
         output.push(`⚠ #${delivery.channel.name}: Skipped - ${reason}`)
@@ -392,6 +429,10 @@ export class BroadcastMessageCommand {
     ).length
     const skipCount = result.deliveryResults.filter(
       r => r.status === 'skipped'
+    ).length
+
+    const failedValidationCount = result.deliveryResults.filter(
+      r => r.status === 'failed' && this.isValidationFailureType(r.error?.type)
     ).length
 
     if (result.overallStatus === 'success') {
@@ -424,6 +465,12 @@ export class BroadcastMessageCommand {
       }
     }
 
+    if (failedValidationCount > 0) {
+      output.push(
+        `Validation issues detected in ${failedValidationCount} channel${failedValidationCount === 1 ? '' : 's'} — adjust the message content or channel targets and retry.`
+      )
+    }
+
     if (verbose) {
       output.push('')
       output.push(
@@ -436,12 +483,29 @@ export class BroadcastMessageCommand {
    * Get exit code based on broadcast result
    */
   private getExitCodeForBroadcastResult(result: BroadcastResult): number {
+    const failedDeliveries = result.deliveryResults.filter(
+      r => r.status === 'failed'
+    )
+    const hasValidationFailure = failedDeliveries.some(delivery =>
+      this.isValidationFailureType(delivery.error?.type)
+    )
+    const hasNonValidationFailure = failedDeliveries.some(
+      delivery =>
+        delivery.error && !this.isValidationFailureType(delivery.error.type)
+    )
+
     switch (result.overallStatus) {
       case 'success':
         return 0
       case 'partial':
+        if (hasValidationFailure && !hasNonValidationFailure) {
+          return 1
+        }
         return 1
       case 'failed':
+        if (hasValidationFailure && !hasNonValidationFailure) {
+          return 1
+        }
         return 2
       default:
         return 5
@@ -538,5 +602,107 @@ export class BroadcastMessageCommand {
       errors,
       warnings,
     }
+  }
+
+  private resolveSenderIdentity(
+    configuration: ChannelConfiguration,
+    options: BroadcastOptions,
+    output: string[]
+  ): {
+    identity?: ResolvedSenderIdentity
+    warnings: string[]
+    requiresAllowDefaultIdentity: boolean
+    allowDefaultIdentityErrorMessage?: string
+  } {
+    const warnings: string[] = []
+    const configIdentity = configuration.senderIdentity
+
+    if (configIdentity) {
+      this.logVerbose(
+        output,
+        `Sender identity configured in ${configuration.filePath}`
+      )
+    } else {
+      this.logVerbose(
+        output,
+        `No sender identity defined in ${configuration.filePath}`
+      )
+    }
+
+    const resolution = SenderIdentity.resolve(configIdentity, {
+      name: options.senderName,
+      iconEmoji: options.senderIconEmoji,
+      iconUrl: options.senderIconUrl,
+    })
+
+    warnings.push(...resolution.warnings)
+
+    let identity = resolution.identity
+    if (identity && !SenderIdentity.isComplete(identity)) {
+      warnings.push(
+        `${
+          resolution.sourceDescription || 'Sender identity'
+        } is missing a name or icon. Using default Slack identity.`
+      )
+      identity = undefined
+    }
+
+    const overridesProvided =
+      options.senderName !== undefined ||
+      options.senderIconEmoji !== undefined ||
+      options.senderIconUrl !== undefined
+
+    if (!identity && overridesProvided) {
+      warnings.push(
+        'Sender identity overrides require --sender-name and either --sender-icon-emoji or --sender-icon-url.'
+      )
+    }
+
+    const allowDefaultFromConfig = configIdentity?.allowDefaultIdentity === true
+    const allowDefaultIdentityEnabled =
+      options.allowDefaultIdentity || allowDefaultFromConfig
+
+    let requiresAllowDefaultIdentity = false
+    let allowDefaultIdentityErrorMessage: string | undefined
+
+    if (!identity) {
+      if (!allowDefaultIdentityEnabled) {
+        const message = `Sender identity not configured in ${configuration.filePath}. Use --allow-default-identity to proceed with the default Slack identity.`
+        warnings.push(message)
+        requiresAllowDefaultIdentity = true
+        allowDefaultIdentityErrorMessage = message
+      } else if (allowDefaultFromConfig && !options.allowDefaultIdentity) {
+        warnings.push(
+          `Sender identity is not configured, but ${configuration.filePath} allows using the default Slack identity.`
+        )
+      }
+    }
+
+    if (identity) {
+      const icon = identity.iconEmoji || identity.iconUrl || 'default'
+      this.logVerbose(
+        output,
+        `Sender identity resolved from ${
+          resolution.sourceDescription || 'configuration'
+        }: name="${identity.name}" icon=${icon}`
+      )
+    }
+
+    return {
+      ...(identity ? { identity } : {}),
+      warnings,
+      requiresAllowDefaultIdentity,
+      ...(allowDefaultIdentityErrorMessage
+        ? { allowDefaultIdentityErrorMessage }
+        : {}),
+    }
+  }
+
+  private isValidationFailureType(type?: string | null): boolean {
+    if (!type) {
+      return false
+    }
+
+    return /invalid_arguments|validation/i.test(type)
   }
 }

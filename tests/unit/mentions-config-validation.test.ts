@@ -54,3 +54,82 @@ describe('mentions config validation (T026)', () => {
     expect(result.errors.some(e => e.field === 'mentions')).toBe(true)
   })
 })
+
+describe('sender identity validation', () => {
+  const service = new ConfigValidationService()
+
+  it('accepts valid sender identity configuration', () => {
+    const config: ChannelConfiguration = {
+      ...baseConfig(),
+      senderIdentity: {
+        name: 'Deploy Bot',
+        iconEmoji: ':rocket:',
+      },
+    }
+
+    const result = service.validateChannelConfiguration(config)
+    expect(result.isValid).toBe(true)
+  })
+
+  it('rejects missing icon values', () => {
+    const config: ChannelConfiguration = {
+      ...baseConfig(),
+      senderIdentity: {
+        name: 'Deploy Bot',
+      },
+    }
+
+    const result = service.validateChannelConfiguration(config)
+    expect(result.isValid).toBe(false)
+    expect(result.errors.map(e => e.field)).toContain('senderIdentity.icon')
+  })
+
+  it('rejects simultaneous emoji and URL icons', () => {
+    const config: ChannelConfiguration = {
+      ...baseConfig(),
+      senderIdentity: {
+        name: 'Deploy Bot',
+        iconEmoji: ':rocket:',
+        iconUrl: 'https://example.com/icon.png',
+      },
+    }
+
+    const result = service.validateChannelConfiguration(config)
+    expect(result.isValid).toBe(false)
+    expect(result.errors.map(e => e.field)).toContain(
+      'senderIdentity.iconEmoji'
+    )
+  })
+
+  it('rejects invalid icon emoji format', () => {
+    const config: ChannelConfiguration = {
+      ...baseConfig(),
+      senderIdentity: {
+        name: 'Deploy Bot',
+        iconEmoji: 'rocket',
+      },
+    }
+
+    const result = service.validateChannelConfiguration(config)
+    expect(result.isValid).toBe(false)
+    expect(result.errors.map(e => e.field)).toContain(
+      'senderIdentity.iconEmoji'
+    )
+  })
+
+  it('rejects non-https icon URLs', () => {
+    const config: ChannelConfiguration = {
+      ...baseConfig(),
+      senderIdentity: {
+        name: 'Deploy Bot',
+        iconUrl: 'http://example.com/icon.png',
+      },
+    }
+
+    const result = service.validateChannelConfiguration(config)
+    expect(result.isValid).toBe(false)
+    expect(result.errors.map(e => e.field)).toContain(
+      'senderIdentity.iconUrl'
+    )
+  })
+})

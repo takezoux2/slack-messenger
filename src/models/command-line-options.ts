@@ -36,6 +36,10 @@ export interface CommandLineOptionsParams {
   logLevel?: string | undefined
   timeout?: number | undefined
   retries?: number | undefined
+  senderName?: string | undefined
+  senderIconEmoji?: string | undefined
+  senderIconUrl?: string | undefined
+  allowDefaultIdentity?: boolean | undefined
   // Broadcast command options
   configPath?: string | undefined
   channelList?: string | undefined
@@ -58,6 +62,10 @@ export class CommandLineOptions {
   private readonly _logLevel: string | undefined
   private readonly _timeout: number
   private readonly _retries: number
+  private readonly _senderName: string | undefined
+  private readonly _senderIconEmoji: string | undefined
+  private readonly _senderIconUrl: string | undefined
+  private readonly _allowDefaultIdentity: boolean
   // Broadcast command properties
   private readonly _configPath: string | undefined
   private readonly _channelList: string | undefined
@@ -81,6 +89,10 @@ export class CommandLineOptions {
     this._logLevel = params.logLevel
     this._timeout = params.timeout || 10000 // 10 second default
     this._retries = params.retries || 3 // 3 retries default
+    this._senderName = params.senderName
+    this._senderIconEmoji = params.senderIconEmoji
+    this._senderIconUrl = params.senderIconUrl
+    this._allowDefaultIdentity = params.allowDefaultIdentity || false
     // Broadcast options
     this._configPath = params.configPath
     this._channelList = params.channelList
@@ -166,6 +178,34 @@ export class CommandLineOptions {
    */
   get retries(): number {
     return this._retries
+  }
+
+  /**
+   * Get the sender name override if provided
+   */
+  get senderName(): string | undefined {
+    return this._senderName
+  }
+
+  /**
+   * Get the sender icon emoji override if provided
+   */
+  get senderIconEmoji(): string | undefined {
+    return this._senderIconEmoji
+  }
+
+  /**
+   * Get the sender icon URL override if provided
+   */
+  get senderIconUrl(): string | undefined {
+    return this._senderIconUrl
+  }
+
+  /**
+   * Determine if default identity usage has been explicitly allowed
+   */
+  get allowDefaultIdentity(): boolean {
+    return this._allowDefaultIdentity
   }
 
   /**
@@ -398,6 +438,31 @@ export class CommandLineOptions {
       }
     }
 
+    if (this._senderName !== undefined) {
+      const trimmed = this._senderName?.trim()
+      if (!trimmed) {
+        errors.push('Sender name override must be a non-empty string')
+      }
+    }
+
+    if (this._senderIconEmoji && this._senderIconUrl) {
+      errors.push('Specify either --sender-icon-emoji or --sender-icon-url, not both')
+    }
+
+    if (this._senderIconEmoji) {
+      const trimmed = this._senderIconEmoji.trim()
+      if (!/^:[^:\s]+:$/.test(trimmed)) {
+        errors.push('Sender icon emoji must be in :shortcode: format (e.g., :rocket:)')
+      }
+    }
+
+    if (this._senderIconUrl) {
+      const trimmed = this._senderIconUrl.trim()
+      if (!/^https:\/\//i.test(trimmed)) {
+        errors.push('Sender icon URL must be an https:// URL')
+      }
+    }
+
     if (this._timeout < 1000) {
       errors.push('Timeout must be at least 1000ms (1 second)')
     }
@@ -528,6 +593,10 @@ export class CommandLineOptions {
     logLevel?: string | undefined
     timeout?: number | undefined
     retries?: number | undefined
+    senderName?: string | undefined
+    senderIconEmoji?: string | undefined
+    senderIconUrl?: string | undefined
+    allowDefaultIdentity?: boolean | undefined
     // Broadcast options
     configPath?: string | undefined
     channelList?: string | undefined
@@ -549,6 +618,10 @@ export class CommandLineOptions {
       logLevel: args.logLevel,
       timeout: args.timeout,
       retries: args.retries,
+      senderName: args.senderName,
+      senderIconEmoji: args.senderIconEmoji,
+      senderIconUrl: args.senderIconUrl,
+      allowDefaultIdentity: args.allowDefaultIdentity,
       // Broadcast options
       configPath: args.configPath,
       channelList: args.channelList,
@@ -594,6 +667,10 @@ export class CommandLineOptions {
       logLevel: this._logLevel,
       timeout: this._timeout,
       retries: this._retries,
+      senderName: this._senderName,
+      senderIconEmoji: this._senderIconEmoji,
+      senderIconUrl: this._senderIconUrl,
+      allowDefaultIdentity: this._allowDefaultIdentity,
       isSendMessageCommand: this.isSendMessageCommand,
       isInformationalCommand: this.isInformationalCommand,
       hasRequiredSendMessageArgs: this.hasRequiredSendMessageArgs,

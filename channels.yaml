@@ -1,3 +1,7 @@
+sender_identity:
+  name: 'Release Notifier'
+  icon_emoji: ':rocket:'
+
 channel_lists:
   - name: 'test'
     description: 'Channels for development team'

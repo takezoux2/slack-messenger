@@ -5,15 +5,24 @@
  * authentication, rate limiting, and error handling.
  */
 
-import { WebClient, ChatPostMessageResponse, LogLevel } from '@slack/web-api'
+import {
+  WebClient,
+  ChatPostMessageResponse,
+  ChatPostMessageArguments,
+  LogLevel,
+} from '@slack/web-api'
 import { SlackMessage } from '../models/slack-message.js'
 import { ChannelTarget } from '../models/channel-target.js'
 import { AuthenticationCredentials } from '../models/authentication-credentials.js'
 import { MessageDeliveryResult } from '../models/message-delivery-result.js'
 import type { ResolvedChannel } from '../models/resolved-channel'
 import type { BroadcastResult } from '../models/broadcast-result'
-import type { ChannelDeliveryResult } from '../models/channel-delivery-result'
+import type {
+  ChannelDeliveryResult,
+  SlackError,
+} from '../models/channel-delivery-result'
 import type { BroadcastOptions } from '../models/broadcast-options'
+import type { ResolvedSenderIdentity } from '../models/sender-identity'
 
 export interface SlackServiceConfig {
   credentials: AuthenticationCredentials
@@ -47,7 +56,8 @@ export class SlackService {
    */
   async sendMessage(
     message: SlackMessage,
-    target: ChannelTarget
+    target: ChannelTarget,
+    identity?: ResolvedSenderIdentity
   ): Promise<MessageDeliveryResult> {
     const startTime = Date.now()
     const retryCount = 0
@@ -59,9 +69,8 @@ export class SlackService {
       }
 
       // Prepare the API call
-      const response = await this.performSendMessage(message, target)
+      const response = await this.performSendMessage(message, target, identity)
       const deliveryTime = Date.now() - startTime
-
       // Process successful response
       if (response.ok && response.message) {
         return MessageDeliveryResult.success({
@@ -75,16 +84,32 @@ export class SlackService {
             messageLength: message.contentLength,
             hasMarkdown: message.hasMarkdownFormatting,
             isMultiLine: message.isMultiLine,
+            ...(identity
+              ? {
+                  senderIdentity: {
+                    source: identity.source,
+                    name: identity.name,
+                    iconEmoji: identity.iconEmoji,
+                    iconUrl: identity.iconUrl,
+                  },
+                }
+              : {}),
           },
         })
       } else {
         // Handle API error response
         const error = new Error(response.error || 'Unknown Slack API error')
+        const metadata: Record<string, unknown> = {
+          slackResponse: response,
+        }
+
         return this.createFailureResult(
           error,
           target.identifier,
           Date.now() - startTime,
-          retryCount
+          retryCount,
+          identity,
+          metadata
         )
       }
     } catch (error) {
@@ -93,7 +118,8 @@ export class SlackService {
         error instanceof Error ? error : new Error(String(error)),
         target.identifier,
         deliveryTime,
-        retryCount
+        retryCount,
+        identity
       )
     }
   }
@@ -172,51 +198,162 @@ export class SlackService {
    */
   private async performSendMessage(
     message: SlackMessage,
-    target: ChannelTarget
+    target: ChannelTarget,
+    identity?: ResolvedSenderIdentity
   ): Promise<ChatPostMessageResponse> {
-    return await this.client.chat.postMessage({
+    const payload: ChatPostMessageArguments = {
       channel: target.identifier,
       text: message.getFormattedContent(),
       unfurl_links: false,
       unfurl_media: false,
-    })
+    }
+
+    if (identity && identity.name) {
+      payload['username'] = identity.name
+      if (identity.iconEmoji) {
+        payload['icon_emoji'] = identity.iconEmoji
+      }
+      if (identity.iconUrl) {
+        payload['icon_url'] = identity.iconUrl
+      }
+    }
+
+    return await this.client.chat.postMessage(payload)
   }
 
-  /**
-   * Create a failure result based on error type
-   */
   private createFailureResult(
     error: Error,
     channelId: string,
     deliveryTimeMs: number,
-    retryCount: number
+    retryCount: number,
+    identity?: ResolvedSenderIdentity,
+    extraMetadata?: Record<string, unknown>
   ): MessageDeliveryResult {
-    const metadata = {
-      originalError: error.name,
+    let normalizedError = error
+
+    const metadata: Record<string, unknown> = {
       deliveryAttempts: retryCount + 1,
+      deliveryTimeMs,
+      retryCount,
+      originalError: error.name,
+      originalErrorMessage: error.message,
+      ...(extraMetadata ?? {}),
     }
 
-    // Determine error type and create appropriate result
-    if (this.isAuthenticationError(error)) {
-      return MessageDeliveryResult.authenticationError(error, metadata)
-    } else if (this.isChannelError(error)) {
-      return MessageDeliveryResult.channelError(error, channelId, metadata)
-    } else if (this.isNetworkError(error)) {
+    if (identity) {
+      metadata['senderIdentity'] = {
+        source: identity.source,
+        name: identity.name,
+        iconEmoji: identity.iconEmoji,
+        iconUrl: identity.iconUrl,
+      }
+    }
+
+    const slackResponse = this.extractSlackResponse(normalizedError, metadata)
+    if (slackResponse && !metadata['slackResponse']) {
+      metadata['slackResponse'] = slackResponse
+    }
+
+    const slackError = this.extractSlackErrorCode(normalizedError, metadata)
+    if (slackError) {
+      metadata['slackError'] = slackError
+    }
+
+    if (this.isInvalidArgumentsError(normalizedError, metadata)) {
+      const message = this.buildInvalidArgumentsMessage(
+        normalizedError,
+        metadata
+      )
+      const validationError = new Error(message)
+      validationError.name = 'ValidationError'
+      normalizedError = validationError
+      metadata['errorCategory'] = 'invalid_arguments'
+      metadata['validationGuidance'] =
+        'Ensure the message text is between 1 and 40,000 characters, is not empty, and the channel ID is valid.'
+    }
+
+    if (this.isAuthenticationError(normalizedError)) {
+      return MessageDeliveryResult.authenticationError(
+        normalizedError,
+        metadata
+      )
+    }
+
+    if (this.isChannelError(normalizedError)) {
+      return MessageDeliveryResult.channelError(
+        normalizedError,
+        channelId,
+        metadata
+      )
+    }
+
+    if (this.isNetworkError(normalizedError)) {
       return MessageDeliveryResult.networkError(
-        error,
+        normalizedError,
         channelId,
         retryCount,
         metadata
       )
-    } else {
-      return MessageDeliveryResult.failure({
-        error,
-        channelId,
-        deliveryTimeMs,
-        retryCount,
-        metadata,
-      })
     }
+
+    return MessageDeliveryResult.failure({
+      error: normalizedError,
+      channelId,
+      deliveryTimeMs,
+      retryCount,
+      metadata,
+    })
+  }
+
+  private extractSlackResponse(
+    error: Error,
+    metadata: Record<string, unknown>
+  ): ChatPostMessageResponse | undefined {
+    const fromMetadata = metadata['slackResponse']
+    if (fromMetadata && typeof fromMetadata === 'object') {
+      return fromMetadata as ChatPostMessageResponse
+    }
+
+    const errorWithData = error as Error & {
+      data?: Partial<ChatPostMessageResponse>
+    }
+
+    if (
+      errorWithData.data &&
+      typeof errorWithData.data === 'object' &&
+      errorWithData.data.ok === false
+    ) {
+      return errorWithData.data as ChatPostMessageResponse
+    }
+
+    return undefined
+  }
+
+  private extractSlackErrorCode(
+    error: Error,
+    metadata: Record<string, unknown>
+  ): string | undefined {
+    const fromMetadata = metadata['slackError']
+    if (typeof fromMetadata === 'string' && fromMetadata.length > 0) {
+      return fromMetadata
+    }
+
+    const slackResponse = metadata['slackResponse'] as
+      | ChatPostMessageResponse
+      | undefined
+    if (slackResponse?.error) {
+      return slackResponse.error
+    }
+
+    const errorWithData = error as Error & {
+      data?: { error?: unknown }
+    }
+
+    if (errorWithData.data && typeof errorWithData.data.error === 'string') {
+      return errorWithData.data.error
+    }
+
+    return undefined
   }
 
   /**
@@ -273,6 +410,62 @@ export class SlackService {
     return networkErrorPatterns.some(
       pattern => pattern.test(error.message) || pattern.test(error.name)
     )
+  }
+
+  private isInvalidArgumentsError(
+    error: Error,
+    extraMetadata?: Record<string, unknown>
+  ): boolean {
+    const patterns = [
+      /invalid_arguments/i,
+      /text.*must.*not.*be.*empty/i,
+      /text.*cannot.*be.*empty/i,
+      /invalid.*arguments/i,
+    ]
+
+    const matchesPattern = patterns.some(
+      pattern => pattern.test(error.message) || pattern.test(error.name)
+    )
+
+    if (matchesPattern) {
+      return true
+    }
+
+    const slackResponse = extraMetadata?.['slackResponse'] as
+      | ChatPostMessageResponse
+      | undefined
+    const responseMessages = slackResponse?.response_metadata?.messages
+    if (Array.isArray(responseMessages)) {
+      return responseMessages.some(message =>
+        patterns.some(pattern => pattern.test(message))
+      )
+    }
+
+    return false
+  }
+
+  private buildInvalidArgumentsMessage(
+    error: Error,
+    extraMetadata?: Record<string, unknown>
+  ): string {
+    const slackResponse = extraMetadata?.['slackResponse'] as
+      | ChatPostMessageResponse
+      | undefined
+    const responseMessages = slackResponse?.response_metadata?.messages
+
+    const guidance =
+      'Ensure the message text is between 1 and 40,000 characters, is not empty, and the channel ID is valid.'
+
+    if (Array.isArray(responseMessages) && responseMessages.length > 0) {
+      const combined = responseMessages.join(' ')
+      return `Slack rejected the request: ${combined}`
+    }
+
+    if (error.message && error.message !== 'invalid_arguments') {
+      return `Slack rejected the request: ${error.message}`
+    }
+
+    return `Slack rejected the request due to invalid arguments. ${guidance}`
   }
 
   /**
@@ -432,45 +625,31 @@ export class SlackService {
   async broadcastMessage(
     channels: ResolvedChannel[],
     message: string,
-    options?: Partial<BroadcastOptions>
+    options?: Partial<BroadcastOptions>,
+    identity?: ResolvedSenderIdentity
   ): Promise<BroadcastResult> {
     const deliveryResults: ChannelDeliveryResult[] = []
 
-    for (const channel of channels) {
+    for (const [index, channel] of channels.entries()) {
       try {
-        // Skip if bot is not a member and it's a private channel
-        if (channel.isPrivate && !channel.isMember) {
-          deliveryResults.push({
-            channel,
-            status: 'skipped',
-            error: {
-              type: 'not_in_channel',
-              message: 'Bot is not a member of this private channel',
-            },
-          })
-          continue
-        }
-
-        // Skip archived channels
-        if (channel.isArchived) {
-          deliveryResults.push({
-            channel,
-            status: 'failed',
-            error: {
-              type: 'is_archived',
-              message: 'Cannot send messages to archived channels',
-            },
-          })
-          continue
-        }
-
-        // Send message
-        const response = await this.client.chat.postMessage({
+        const payload: ChatPostMessageArguments = {
           channel: channel.id,
           text: message,
-          as_user: true,
-        })
+          unfurl_links: false,
+          unfurl_media: false,
+        }
 
+        if (identity && identity.name) {
+          payload['username'] = identity.name
+          if (identity.iconEmoji) {
+            payload['icon_emoji'] = identity.iconEmoji
+          }
+          if (identity.iconUrl) {
+            payload['icon_url'] = identity.iconUrl
+          }
+        }
+
+        const response = await this.client.chat.postMessage(payload)
         if (response.ok && response.ts) {
           deliveryResults.push({
             channel,
@@ -479,51 +658,314 @@ export class SlackService {
             deliveredAt: new Date(),
           })
         } else {
-          deliveryResults.push({
-            channel,
-            status: 'failed',
-            error: {
-              type: response.error || 'unknown_error',
-              message: response.error || 'Unknown error occurred',
-            },
-          })
+          const errorMessage =
+            response.error || 'Slack API returned an unsuccessful response'
+          const apiError = new Error(errorMessage)
+          deliveryResults.push(
+            this.buildChannelFailureResult(channel, apiError, response)
+          )
         }
-
-        // Small delay to respect rate limits
-        await new Promise(resolve => setTimeout(resolve, 100))
       } catch (error) {
-        deliveryResults.push({
-          channel,
-          status: 'failed',
-          error: {
-            type: 'network_error',
-            message: error instanceof Error ? error.message : String(error),
-          },
-        })
+        const normalizedError =
+          error instanceof Error ? error : new Error(String(error))
+        deliveryResults.push(
+          this.buildChannelFailureResult(channel, normalizedError)
+        )
       }
-    }
 
-    // Determine overall status
-    const successCount = deliveryResults.filter(
-      r => r.status === 'success'
-    ).length
-
-    let overallStatus: 'success' | 'partial' | 'failed'
-    if (successCount === channels.length) {
-      overallStatus = 'success'
-    } else if (successCount > 0) {
-      overallStatus = 'partial'
-    } else {
-      overallStatus = 'failed'
+      if (index < channels.length - 1) {
+        await this.delay(100)
+      }
     }
 
     return {
       targetListName: options?.listName || 'unknown',
       totalChannels: channels.length,
       deliveryResults,
-      overallStatus,
+      overallStatus: this.determineOverallStatus(deliveryResults),
       completedAt: new Date(),
     }
+  }
+
+  private buildChannelFailureResult(
+    channel: ResolvedChannel,
+    error: Error,
+    slackResponse?: ChatPostMessageResponse
+  ): ChannelDeliveryResult {
+    const slackError = this.normalizeSlackError(error, slackResponse)
+    const status: ChannelDeliveryResult['status'] = this.shouldMarkAsSkipped(
+      slackError.type,
+      channel
+    )
+      ? 'skipped'
+      : 'failed'
+
+    return {
+      channel,
+      status,
+      error: slackError,
+    }
+  }
+
+  private normalizeSlackError(
+    error: Error,
+    slackResponse?: ChatPostMessageResponse
+  ): SlackError {
+    const metadata: Record<string, unknown> = {}
+    if (slackResponse) {
+      metadata['slackResponse'] = slackResponse
+    }
+
+    const rawType = this.extractSlackErrorCode(error, metadata)
+    const normalizedType =
+      rawType && `${rawType}`.length > 0
+        ? this.normalizeErrorType(String(rawType))
+        : this.classifyFallbackError(error)
+
+    const fallbackMessage = this.extractErrorMessage(error, slackResponse)
+    const message = this.getSlackErrorMessage(normalizedType, fallbackMessage)
+    const details = this.buildSlackErrorDetails(error, slackResponse)
+    const retryAfter = this.extractRetryAfterSeconds(error)
+
+    const slackError: SlackError = {
+      type: normalizedType,
+      message,
+    }
+
+    if (details && Object.keys(details).length > 0) {
+      slackError.details = details
+    }
+
+    if (typeof retryAfter === 'number' && Number.isFinite(retryAfter)) {
+      slackError.retryAfter = retryAfter
+    }
+
+    return slackError
+  }
+
+  private determineOverallStatus(
+    results: ChannelDeliveryResult[]
+  ): BroadcastResult['overallStatus'] {
+    if (results.length === 0) {
+      return 'success'
+    }
+
+    const successCount = results.filter(r => r.status === 'success').length
+    if (successCount === results.length) {
+      return 'success'
+    }
+
+    if (successCount === 0) {
+      return 'failed'
+    }
+
+    return 'partial'
+  }
+
+  private shouldMarkAsSkipped(
+    errorType: string | undefined,
+    channel: ResolvedChannel
+  ): boolean {
+    if (!errorType) {
+      return false
+    }
+
+    const skipTypes = new Set([
+      'not_in_channel',
+      'not_in_group',
+      'missing_scope',
+      'no_permission',
+      'restricted_action',
+      'cannot_dm_bot',
+    ])
+
+    if (skipTypes.has(errorType)) {
+      return true
+    }
+
+    if (!channel.isMember && errorType === 'channel_error') {
+      return true
+    }
+
+    return false
+  }
+
+  private getSlackErrorMessage(errorType: string, fallback: string): string {
+    const safeFallback =
+      fallback && fallback.trim().length > 0
+        ? fallback
+        : 'Slack API request failed'
+
+    switch (errorType) {
+      case 'not_in_channel':
+      case 'not_in_group':
+        return 'Bot is not a member of the channel.'
+      case 'missing_scope':
+        return 'Missing a required Slack scope for this channel.'
+      case 'no_permission':
+      case 'restricted_action':
+        return 'Slack denied permission to post to this channel.'
+      case 'cannot_dm_bot':
+        return 'Cannot send direct messages to this bot.'
+      case 'channel_is_archived':
+      case 'is_archived':
+        return 'Channel is archived and cannot receive messages.'
+      case 'channel_not_found':
+        return 'Channel not found. Verify the channel ID or name.'
+      case 'invalid_auth':
+      case 'not_authed':
+        return 'Authentication failed for the Slack workspace.'
+      case 'rate_limited':
+        return 'Slack rate limit reached. Try again after waiting.'
+      case 'network_error':
+        return 'Network error while contacting Slack.'
+      default:
+        return safeFallback
+    }
+  }
+
+  private normalizeErrorType(value: string): string {
+    if (!value || value.trim().length === 0) {
+      return 'unknown_error'
+    }
+
+    return value
+      .trim()
+      .replace(/([a-z])([A-Z])/g, '$1_$2')
+      .replace(/[\s-]+/g, '_')
+      .toLowerCase()
+  }
+
+  private classifyFallbackError(error: Error): string {
+    if (this.isAuthenticationError(error)) {
+      return 'authentication_error'
+    }
+
+    if (this.isChannelError(error)) {
+      return 'channel_error'
+    }
+
+    if (this.isNetworkError(error)) {
+      return 'network_error'
+    }
+
+    return error.name && error.name !== 'Error'
+      ? this.normalizeErrorType(error.name)
+      : 'unknown_error'
+  }
+
+  private extractErrorMessage(
+    error: Error,
+    slackResponse?: ChatPostMessageResponse
+  ): string {
+    if (slackResponse?.error) {
+      return slackResponse.error
+    }
+
+    const errorWithData = error as Error & {
+      data?: Record<string, unknown>
+    }
+
+    const data = errorWithData.data
+    const dataError = data?.['error']
+    if (typeof dataError === 'string' && dataError.length > 0) {
+      return dataError
+    }
+
+    const match = /An API error occurred: (.+)$/i.exec(error.message)
+    if (match && match[1]) {
+      return match[1]
+    }
+
+    return error.message || 'Slack API request failed'
+  }
+
+  private buildSlackErrorDetails(
+    error: Error,
+    slackResponse?: ChatPostMessageResponse
+  ): Record<string, unknown> | undefined {
+    const details: Record<string, unknown> = {}
+    const errorWithData = error as Error & {
+      data?: Record<string, unknown>
+    }
+
+    const responseMetadata =
+      slackResponse?.response_metadata ||
+      (errorWithData.data?.['response_metadata'] as
+        | Record<string, unknown>
+        | undefined)
+
+    const messages = responseMetadata?.['messages']
+    if (Array.isArray(messages) && messages.length > 0) {
+      details['slackMessages'] = messages
+    }
+
+    const warnings = responseMetadata?.['warnings']
+    if (Array.isArray(warnings) && warnings.length > 0) {
+      details['warnings'] = warnings
+    }
+
+    if (errorWithData.data) {
+      const needed = errorWithData.data['needed']
+      if (needed !== undefined) {
+        details['needed'] = needed
+      }
+
+      const provided = errorWithData.data['provided']
+      if (provided !== undefined) {
+        details['provided'] = provided
+      }
+
+      const scopes = errorWithData.data['scopes']
+      if (scopes !== undefined) {
+        details['scopes'] = scopes
+      }
+
+      const acceptedScopes = errorWithData.data['acceptedScopes']
+      if (acceptedScopes !== undefined) {
+        details['acceptedScopes'] = acceptedScopes
+      }
+    }
+
+    return Object.keys(details).length > 0 ? details : undefined
+  }
+
+  private extractRetryAfterSeconds(error: Error): number | undefined {
+    const errorWithRetry = error as Error & {
+      retryAfter?: number
+      data?: Record<string, unknown>
+    }
+
+    if (typeof errorWithRetry.retryAfter === 'number') {
+      return errorWithRetry.retryAfter
+    }
+
+    const data = errorWithRetry.data
+    if (data) {
+      const retryAfterValue = data['retry_after']
+      if (typeof retryAfterValue === 'number') {
+        return retryAfterValue
+      }
+
+      const headers = data['headers'] as Record<string, unknown> | undefined
+      if (headers) {
+        const headerValue = headers['retry-after'] ?? headers['Retry-After']
+        if (typeof headerValue === 'string') {
+          const parsed = Number(headerValue)
+          if (Number.isFinite(parsed)) {
+            return parsed
+          }
+        } else if (typeof headerValue === 'number') {
+          return headerValue
+        }
+      }
+    }
+
+    return undefined
+  }
+
+  private async delay(ms: number): Promise<void> {
+    await new Promise(resolve => setTimeout(resolve, ms))
   }
 
   /**

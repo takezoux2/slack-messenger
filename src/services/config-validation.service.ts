@@ -2,6 +2,7 @@ import type { ChannelConfiguration } from '../models/channel-configuration'
 import type { NamedChannelList } from '../models/named-channel-list'
 import type { ChannelTarget } from '../models/channel-target'
 import type { BroadcastOptions } from '../models/broadcast-options'
+import type { SenderIdentityConfig } from '../models/sender-identity'
 
 /**
  * Validation error details
@@ -164,6 +165,13 @@ export class ConfigValidationService {
           value: config.mentions as any,
         })
       }
+    }
+
+    if (config.senderIdentity !== undefined) {
+      const senderIdentityErrors = this.validateSenderIdentity(
+        config.senderIdentity as SenderIdentityConfig
+      )
+      errors.push(...senderIdentityErrors)
     }
 
     return {
@@ -409,6 +417,50 @@ export class ConfigValidationService {
       })
     }
 
+    if (options.senderName !== undefined) {
+      if (typeof options.senderName !== 'string') {
+        errors.push({
+          field: 'senderName',
+          message: 'Sender name override must be a string',
+          value: options.senderName,
+        })
+      } else if (options.senderName.trim().length === 0) {
+        errors.push({
+          field: 'senderName',
+          message: 'Sender name override cannot be empty',
+          value: options.senderName,
+        })
+      }
+    }
+
+    if (options.senderIconEmoji && options.senderIconUrl) {
+      errors.push({
+        field: 'senderIconEmoji',
+        message: 'Provide either senderIconEmoji or senderIconUrl, not both',
+        value: options.senderIconEmoji,
+      })
+    }
+
+    if (options.senderIconEmoji) {
+      if (!/^:[^:\s]+:$/.test(options.senderIconEmoji.trim())) {
+        errors.push({
+          field: 'senderIconEmoji',
+          message: 'senderIconEmoji must be in :shortcode: format',
+          value: options.senderIconEmoji,
+        })
+      }
+    }
+
+    if (options.senderIconUrl) {
+      if (!/^https:\/\//i.test(options.senderIconUrl.trim())) {
+        errors.push({
+          field: 'senderIconUrl',
+          message: 'senderIconUrl must be an https URL',
+          value: options.senderIconUrl,
+        })
+      }
+    }
+
     return {
       isValid: errors.length === 0,
       errors,
@@ -494,5 +546,73 @@ export class ConfigValidationService {
         totalLists > 0 ? Math.round((totalChannels / totalLists) * 10) / 10 : 0,
       channelsByType: { names: nameCount, ids: idCount },
     }
+  }
+
+  private validateSenderIdentity(
+    identity: SenderIdentityConfig
+  ): ValidationError[] {
+    const errors: ValidationError[] = []
+    const fieldBase = 'senderIdentity'
+
+    const name =
+      typeof identity.name === 'string' ? identity.name.trim() : undefined
+    const iconEmoji =
+      typeof identity.iconEmoji === 'string'
+        ? identity.iconEmoji.trim()
+        : undefined
+    const iconUrl =
+      typeof identity.iconUrl === 'string' ? identity.iconUrl.trim() : undefined
+
+    if (!name) {
+      errors.push({
+        field: `${fieldBase}.name`,
+        message: 'Sender identity must include a non-empty name',
+        value: identity.name ?? null,
+      })
+    }
+
+    if (iconEmoji && iconUrl) {
+      errors.push({
+        field: `${fieldBase}.iconEmoji`,
+        message: 'Specify either iconEmoji or iconUrl, not both',
+        value: iconEmoji,
+      })
+    }
+
+    if (!iconEmoji && !iconUrl) {
+      errors.push({
+        field: `${fieldBase}.icon`,
+        message: 'Sender identity must include an icon emoji or icon URL',
+      })
+    }
+
+    if (iconEmoji && !/^:[^:\s]+:$/.test(iconEmoji)) {
+      errors.push({
+        field: `${fieldBase}.iconEmoji`,
+        message: 'Sender identity iconEmoji must be in :shortcode: format',
+        value: iconEmoji,
+      })
+    }
+
+    if (iconUrl && !/^https:\/\//i.test(iconUrl)) {
+      errors.push({
+        field: `${fieldBase}.iconUrl`,
+        message: 'Sender identity iconUrl must be an https URL',
+        value: iconUrl,
+      })
+    }
+
+    if (
+      identity.allowDefaultIdentity !== undefined &&
+      typeof identity.allowDefaultIdentity !== 'boolean'
+    ) {
+      errors.push({
+        field: `${fieldBase}.allowDefaultIdentity`,
+        message: 'allowDefaultIdentity must be a boolean when provided',
+        value: identity.allowDefaultIdentity,
+      })
+    }
+
+    return errors
   }
 }
